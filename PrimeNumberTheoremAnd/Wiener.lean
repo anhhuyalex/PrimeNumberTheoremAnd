@@ -341,7 +341,82 @@ for all non-zero $u \in \R$.
 theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     (habscont : AbsolutelyContinuous ψ)
     (hvar : BoundedVariationOn (deriv ψ) Set.univ) (u : ℝ) (hu : u ≠ 0) :
-    ‖𝓕 (ψ : ℝ → ℂ) u‖ ≤ (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖) ^ 2 := by sorry
+    ‖𝓕 (ψ : ℝ → ℂ) u‖ ≤ (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖) ^ 2 := by
+  -- Step 0: make explicit the Fourier integral representation (mathlib lemma)
+  have h_ft :
+    𝓕 (ψ : ℝ → ℂ) u = ∫ v : ℝ, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v ∂volume :=
+    Real.fourier_real_eq_integral_exp_smul (ψ : ℝ → ℂ) u
+
+  -- Step 1: ensure `deriv ψ` is integrable on ℝ (we will need this to apply dominated convergence
+  -- and to apply `prelim_decay_2` to ψ').
+  have hderiv_int : Integrable (deriv ψ) volume := by
+    -- AGENT TASK: justify integrability of deriv ψ.
+    -- This can be provided either as an extra hypothesis or proven from `habscont` + `hvar` + `hψ`.
+    -- Put a `sorry` for now.
+    sorry
+
+  -- Step 2: integration by parts on finite intervals [-R, R] using absolute continuity of ψ.
+  -- For each R>0 we have the compact-interval IBP identity:
+  --   (2π i u) * ∫_{-R}^R ψ(t) e(-tu) dt
+  --     = ψ(R) e(-R u) - ψ(-R) e(R u) - ∫_{-R}^R ψ'(t) e(-tu) dt.
+  have ibp_on_Icc :
+    ∀ R : ℝ, R > 0 →
+      (2 * π * (u : ℂ) * Complex.I) *
+        (∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v ∂volume)
+      = ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)
+        - ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)
+        - ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume := by
+    -- AGENT TASK: prove classical IBP on compact interval using `habscont` and smoothness of the
+    -- exponential kernel. Prefer an existing `interval_integral.integral_by_parts` lemma if present.
+    sorry
+
+  -- Step 3: let R → ∞. Show boundary terms vanish and pass to limit on the ψ' integral.
+  have tendsto_boundary_zero :
+    Tendsto (fun R => ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)) atTop (𝓝 0)
+    ∧ Tendsto (fun R => ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)) atTop (𝓝 0) := by
+    -- AGENT TASK: prove from `habscont` + `hψ` that ψ(t)→0 as t→±∞; then multiply by bounded unit modulus exponential.
+    sorry
+
+  have integral_ψ'_converge :
+    Tendsto (fun R => ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume)
+           atTop (𝓝 (∫ v, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume)) := by
+    -- AGENT TASK: apply dominated convergence using `hderiv_int`. `|cexp(...) * deriv ψ| = |deriv ψ|`.
+
+    sorry
+
+  -- Step 4: pass limit in the IBP identity as R → ∞ to obtain (2π i u) · 𝓕 ψ u = - 𝓕 (deriv ψ) u
+  have fourier_deriv_eq : (2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u = - 𝓕 (deriv ψ) u := by
+    have h_LHS : Tendsto (fun R => (2 * π * (u : ℂ) * Complex.I) *
+        ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v) atTop
+        (𝓝 ((2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u)) := by
+      apply tendsto_const_nhds.mul
+      rw [h_ft]
+      have h_int : Integrable (fun v => Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v) volume := by
+        apply hψ.bdd_mul (Continuous.aestronglyMeasurable (by fun_prop)) (C := 1)
+
+
+      exact (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated h_int
+    apply tendsto_nhds_unique h_LHS
+    have h_rhs := tendsto_boundary_zero.1.sub tendsto_boundary_zero.2 |>.sub integral_ψ'_converge
+    simpa using h_rhs
+
+  -- Step 5: apply Lemma 2.1.4 to deriv ψ (prelim_decay_2).
+  have bound_deriv := prelim_decay_2 (deriv ψ) (hderiv_int) (hvar) u hu
+  -- `bound_deriv` : ‖𝓕 (deriv ψ) u‖ ≤ (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖)
+
+  -- Step 6: combine algebraically using the fourier_deriv_eq identity.
+  calc
+    ‖𝓕 ψ u‖ = ‖𝓕 (deriv ψ) u‖ / ‖2 * π * (u : ℂ) * Complex.I‖ := by
+      have h : (2 * π * (u : ℂ) * Complex.I) ≠ 0 := by
+        simp [hu, pi_ne_zero]
+      rw [← fourier_deriv_eq, norm_neg, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
+    _ ≤ ((eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖)) / (2 * π * ‖u‖) := by
+      have : ‖2 * π * (u : ℂ) * Complex.I‖ = 2 * π * ‖u‖ := by
+        simp [abs_eq_self.mpr pi_nonneg]
+      rw [this]
+      exact div_le_div_of_nonneg_right bound_deriv (by positivity)
+    _ = (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖) ^ 2 := by
+      ring
 
 @[blueprint "decay-alt"
   (title := "Decay bound, alternate form")
