@@ -392,7 +392,12 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
       apply tendsto_const_nhds.mul
       rw [h_ft]
       have h_int : Integrable (fun v => Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v) volume := by
-        apply hψ.bdd_mul (Continuous.aestronglyMeasurable (by fun_prop)) (C := 1)
+        refine hψ.bdd_mul ?_ (c := 1) ?_
+        · apply Continuous.aestronglyMeasurable
+          apply Complex.continuous_exp.comp
+          fun_prop
+        · apply ae_of_all; intro v
+          simp [Complex.norm_exp_ofReal_mul_I, le_refl]
 
 
       exact (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated h_int
