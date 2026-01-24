@@ -375,14 +375,21 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     Tendsto (fun R => ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)) atTop (𝓝 0)
     ∧ Tendsto (fun R => ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)) atTop (𝓝 0) := by
     -- AGENT TASK: prove from `habscont` + `hψ` that ψ(t)→0 as t→±∞; then multiply by bounded unit modulus exponential.
+    constructor
+    · apply?
+    ·
     sorry
 
   have integral_ψ'_converge :
     Tendsto (fun R => ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume)
            atTop (𝓝 (∫ v, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume)) := by
-    -- AGENT TASK: apply dominated convergence using `hderiv_int`. `|cexp(...) * deriv ψ| = |deriv ψ|`.
-
-    sorry
+    refine (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated ?_
+    refine hderiv_int.bdd_mul ?_ (c := 1) ?_
+    · apply Continuous.aestronglyMeasurable
+      apply Complex.continuous_exp.comp
+      fun_prop
+    · apply ae_of_all; intro v
+      simp [Complex.norm_exp]
 
   -- Step 4: pass limit in the IBP identity as R → ∞ to obtain (2π i u) · 𝓕 ψ u = - 𝓕 (deriv ψ) u
   have fourier_deriv_eq : (2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u = - 𝓕 (deriv ψ) u := by
@@ -397,9 +404,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
           apply Complex.continuous_exp.comp
           fun_prop
         · apply ae_of_all; intro v
-          simp [Complex.norm_exp_ofReal_mul_I, le_refl]
-
-
+          sorry
       exact (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated h_int
     apply tendsto_nhds_unique h_LHS
     have h_rhs := tendsto_boundary_zero.1.sub tendsto_boundary_zero.2 |>.sub integral_ψ'_converge
