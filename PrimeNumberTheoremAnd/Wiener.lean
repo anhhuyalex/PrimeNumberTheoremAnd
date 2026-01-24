@@ -404,11 +404,20 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
           apply Complex.continuous_exp.comp
           fun_prop
         · apply ae_of_all; intro v
-          sorry
+          rw [neg_mul, Complex.norm_exp_ofReal_mul_I]
+
+
       exact (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated h_int
-    apply tendsto_nhds_unique h_LHS
-    have h_rhs := tendsto_boundary_zero.1.sub tendsto_boundary_zero.2 |>.sub integral_ψ'_converge
-    simpa using h_rhs
+
+    rw [Real.fourier_real_eq_integral_exp_smul (deriv ψ) u]
+    refine tendsto_nhds_unique h_LHS ?_
+    apply (tendsto_congr' (f₂ := fun R => ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I) -
+        ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I) -
+        ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • deriv ψ v) ?_).mpr
+    · have := tendsto_boundary_zero.1.sub tendsto_boundary_zero.2 |>.sub integral_ψ'_converge
+      simpa using this
+    · filter_upwards [Ioi_mem_atTop 0] with R hR
+      exact ibp_on_Icc R hR
 
   -- Step 5: apply Lemma 2.1.4 to deriv ψ (prelim_decay_2).
   have bound_deriv := prelim_decay_2 (deriv ψ) (hderiv_int) (hvar) u hu
@@ -419,7 +428,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     ‖𝓕 ψ u‖ = ‖𝓕 (deriv ψ) u‖ / ‖2 * π * (u : ℂ) * Complex.I‖ := by
       have h : (2 * π * (u : ℂ) * Complex.I) ≠ 0 := by
         simp [hu, pi_ne_zero]
-      rw [← fourier_deriv_eq, norm_neg, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
+      rw [← norm_neg (𝓕 (deriv ψ) u), ← fourier_deriv_eq, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
     _ ≤ ((eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖)) / (2 * π * ‖u‖) := by
       have : ‖2 * π * (u : ℂ) * Complex.I‖ = 2 * π * ‖u‖ := by
         simp [abs_eq_self.mpr pi_nonneg]
