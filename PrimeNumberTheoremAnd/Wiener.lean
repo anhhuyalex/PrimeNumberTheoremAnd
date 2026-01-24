@@ -366,7 +366,10 @@ lemma AbsolutelyContinuous.tendsto_zero {ψ : ℝ → ℂ} (hψ : Integrable ψ 
       have : deriv f = fun x => - deriv ψ (-x) := by ext x; rw [deriv_comp_neg]
       rw [this]
       exact hderiv_int.comp_neg.neg
-    exact (help f hf hac hder).comp tendsto_neg_atTop_atBot
+    convert (help f hf hac hder).comp tendsto_neg_atBot_atTop using 1
+    ext x
+    simp [f]
+
 
 @[blueprint "prelim-decay-3"
   (title := "Preliminary decay bound III")
@@ -394,58 +397,94 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
   -- For each R>0 we have the compact-interval IBP identity:
   --   (2π i u) * ∫_{-R}^R ψ(t) e(-tu) dt
   --     = ψ(R) e(-R u) - ψ(-R) e(R u) - ∫_{-R}^R ψ'(t) e(-tu) dt.
-  have ibp_on_Icc :
-    ∀ R : ℝ, R > 0 →
-      (2 * π * (u : ℂ) * Complex.I) *
-        (∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v ∂volume)
-      = ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)
-        - ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)
-        - ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume := by
-    intro R _
-    let f (v : ℝ) := Complex.exp (↑(-2 * π * v * u) * Complex.I)
-    let g := ψ
-    -- The project-specific `AbsolutelyContinuous` gives us `g b - g a = ∫ t in a..b, deriv g t`.
-    -- Since `f` is smooth and `g` is AC, their product `f * g` is also AC in the same sense.
-    -- To keep it self-contained, we can just prove the identity directly.
-    rw [integral_Icc_eq_integral_interval, integral_Icc_eq_integral_interval]
-    let h (v : ℝ) := f v * g v
-    have h_deriv : ∀ᵐ v, DifferentiableAt ℝ h v := by
-      filter_upwards [habscont.1] with v hv
-      exact (Complex.continuous_exp.comp (continuous_const.mul continuous_id)).differentiableAt.mul hv
-    have h_deriv_eq : ∀ᵐ v, deriv h v = f v * deriv g v + (↑(-2 * π * u) * Complex.I) * f v * g v := by
-      filter_upwards [habscont.1] with v hv
-      rw [deriv_mul (Complex.continuous_exp.comp (continuous_const.mul continuous_id)).differentiableAt hv]
-      congr 1
-      · rw [deriv_exp (differentiableAt_const.mul differentiableAt_id)]
-        rw [deriv_mul_const differentiableAt_id, deriv_id, mul_one]
+  have ibp_on_Icc : ∀ R > 0,
+    (2 * π * ↑u * I) * ∫ (v : ℝ) in Icc (-R) R, cexp (↑(-2 * π * v * u) * I) • ψ v =
+      (∫ (v : ℝ) in Icc (-R) R, cexp (↑(-2 * π * v * u) * I) • deriv ψ v) -
+      (ψ R * cexp (↑(-2 * π * R * u) * I) - ψ (-R) * cexp (↑(-2 * π * -R * u) * I)) := by
+    intro R hR
+
+    -- 1. Define the exponential kernel helper function for clarity
+    let E := fun v : ℝ ↦ cexp (↑(-2 * π * v * u) * I)
+
+    -- 2. Establish properties of E (Differentiable everywhere)
+    have hE_diff : Differentiable ℝ E := by
+      intro x
+      apply DifferentiableAt.cexp
+      apply DifferentiableAt.mul_const
+      apply DifferentiableAt.comp (g := Complex.ofReal) _ (by fun_prop)
+      exact Complex.ofRealCLM.differentiableAt
+    have hE_deriv : ∀ v, deriv E v = ↑(-2 * π * u) * I * E v := by
+      intro v
+      simp only [E]
+      rw [deriv_cexp]
+      · simp only [deriv_mul_const_field, deriv_mul_const, deriv_neg, deriv_id'', Complex.deriv_ofReal, mul_one]
         ring
-    -- Since `f` is C¹ and `g` is AC, FTC applies to `h = f * g`.
-    -- For now, we will use a `sorry` for the final gap in this sub-lemma to focus on the main flow,
-    -- as proper AC theory for products isn't fully imported yet.
-    sorry
-    -- intro R _
-    -- let f (v : ℝ) := Complex.exp (↑(-2 * π * v * u) * Complex.I)
-    -- have hf : ∀ v, HasDerivAt f (f v * (↑(-2 * π * u) * Complex.I)) v := by
-    --   intro v; apply HasDerivAt.exp; apply HasDerivAt.mul_const; apply hasDerivAt_id
-    -- rw [integral_Icc_eq_integral_interval, integral_Icc_eq_integral_interval]
-    -- have := intervalIntegral.integral_mul_deriv_eq_deriv_mul (fun v _ ↦ hf v) (fun v _ ↦ (habscont.1.le x v).hasDerivAt)
-    -- -- Wait, habscont.1 is AE differentiability. I need to be careful.
-    -- -- Actually, AbsolutelyContinuous in this context (Wiener.lean:326) defines it such that habscont.2 is the FTC property.
-    -- -- I should use the product rule for AC functions if available, or just use the FTC definition.
+      · apply DifferentiableAt.mul_const
+        apply DifferentiableAt.comp (g := Complex.ofReal) _ (by fun_prop)
+        exact Complex.ofRealCLM.differentiableAt
 
-    -- -- Let's use the FTC property directly: ∫ (fg)' = fg(R) - fg(-R)
-    -- -- (fg)' = f'g + fg'
-    -- -- ∫ f'g + ∫ fg' = fg(R) - fg(-R)
-    -- -- ∫ fg' = fg(R) - fg(-R) - ∫ f'g
 
-    -- set g := ψ
-    -- have hfg_ac : ∀ a b, f b * g b - f a * g a = ∫ v in a..b, (f v * deriv g v + deriv f v * g v) := by
-    --   intro a b
-    --   rw [habscont.2 a b]
-    --   -- This is still not quite right because I need the product rule for integrals.
-    --   sorry
+    -- 3. Establish AC of the product (ψ * E)
+    -- Since ψ is AC on Univ, it is AC on the interval. E is Smooth, so AC.
+    have h_prod_AC : AbsolutelyContinuousOn (fun v ↦ ψ v * E v) (Icc (-R) R) := by
+      apply AbsolutelyContinuousOn.mul
+      · exact habscont.absolutelyContinuousOn
+      · -- E is Lipschitz/Differentiable on compact interval
+        apply DifferentiableOn.absolutelyContinuousOn
+        apply hE_diff.differentiableOn
 
-    -- sorry
+    -- 4. Establish Integrability of the components
+    -- E is continuous, so IntervalIntegrable
+    have hE_int : IntervalIntegrable E volume (-R) R :=
+      (hE_diff.continuous.intervalIntegrable _ _)
+
+    -- 5. Main Calculation
+    rw [eq_comm]
+    calc
+      -- Start with RHS: ∫ (E * ψ') - Boundary
+      (∫ v in Icc (-R) R, E v * deriv ψ v) - (ψ R * E R - ψ (-R) * E (-R))
+
+      -- Apply FTC: Boundary = ∫ (ψ * E)'
+      = (∫ v in Icc (-R) R, E v * deriv ψ v) - ∫ v in Icc (-R) R, deriv (fun x ↦ ψ x * E x) v := by
+        rw [integral_Icc_eq_integral_Ioc, ← intervalIntegral.integral_of_le (by linarith)]
+        rw [intervalIntegral.integral_deriv_eq_sub]
+        · exact h_prod_AC
+        · exact h_prod_AC.integrableOn_deriv
+
+      -- Combine integrals: ∫ A - ∫ B = ∫ (A - B)
+      _ = ∫ v in Icc (-R) R, (E v * deriv ψ v - deriv (fun x ↦ ψ x * E x) v) := by
+        rw [integral_sub]
+        · apply hderiv_int.integrableOn.bdd_mul (hE_diff.continuous.aestronglyMeasurable)
+          use 1; apply ae_of_all; intro x; simp [E, Complex.norm_exp_ofReal_mul_I]
+        · exact h_prod_AC.integrableOn_deriv
+
+      -- Expand product rule inside the integral
+      _ = ∫ v in Icc (-R) R, (E v * deriv ψ v - (deriv ψ v * E v + ψ v * deriv E v)) := by
+        apply integral_congr_ae
+        filter_upwards [habscont.aestronglyMeasurable.aemeasurable.ae_differentiableWithinAt] with v hv
+        -- Use product rule for derivatives
+        rw [deriv_mul hv (hE_diff v)]
+        ring
+
+      -- Simplify algebra: (E*ψ' - (ψ'*E + ψ*E')) = -ψ*E'
+      _ = ∫ v in Icc (-R) R, -(ψ v * deriv E v) := by
+        congr 1; ext v; ring
+
+      -- Substitute derivative of E: E' = c * E
+      _ = ∫ v in Icc (-R) R, -(ψ v * (↑(-2 * π * u) * I * E v)) := by
+        congr 1; ext v
+        rw [hE_deriv]
+
+      -- Pull out constants to match LHS
+      _ = (2 * π * ↑u * I) * ∫ v in Icc (-R) R, E v * ψ v := by
+        simp only [Complex.ofReal_neg, neg_mul, mul_neg, neg_neg]
+        trans ∫ v in Icc (-R) R, (2 * π * u * I) * (E v * ψ v)
+        · apply integral_congr_ae
+          apply ae_of_all
+          intro a
+          simp
+          ring
+        · rw [integral_const_mul]
 
   -- Step 3: let R → ∞. Show boundary terms vanish and pass to limit on the ψ' integral.
   have tendsto_boundary_zero :
@@ -471,8 +510,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     · apply ae_of_all; intro v
       simp [Complex.norm_exp]
 
-  -- Step 4: pass limit in the IBP identity as R → ∞ to obtain (2π i u) · 𝓕 ψ u = - 𝓕 (deriv ψ) u
-  have fourier_deriv_eq : (2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u = - 𝓕 (deriv ψ) u := by
+  have fourier_deriv_eq : (2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u = 𝓕 (deriv ψ) u := by
     have h_LHS : Tendsto (fun R => (2 * π * (u : ℂ) * Complex.I) *
         ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v) atTop
         (𝓝 ((2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u)) := by
@@ -485,17 +523,22 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
           fun_prop
         · apply ae_of_all; intro v
           rw [neg_mul, Complex.norm_exp_ofReal_mul_I]
-
-
       exact (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated h_int
 
     rw [Real.fourier_real_eq_integral_exp_smul (deriv ψ) u]
     refine tendsto_nhds_unique h_LHS ?_
-    apply (tendsto_congr' (f₂ := fun R => ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I) -
-        ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I) -
-        ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • deriv ψ v) ?_).mpr
-    · have := tendsto_boundary_zero.1.sub tendsto_boundary_zero.2 |>.sub integral_ψ'_converge
-      simpa using this
+    apply (tendsto_congr' (f₂ := fun R =>
+        (∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • deriv ψ v) -
+        (ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I) -
+        ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I))) ?_).mpr
+    · have := integral_ψ'_converge.sub tendsto_boundary_zero.1 |>.add tendsto_boundary_zero.2
+      convert this using 1
+      ext y
+      simp only [mul_comm]
+      simp only [mul_neg, ofReal_neg, ofReal_mul, ofReal_ofNat, smul_eq_mul, neg_mul, neg_neg]
+      · simp [sub_eq_add_neg, neg_sub, add_assoc]
+        ring
+      · simp
     · filter_upwards [Ioi_mem_atTop 0] with R hR
       exact ibp_on_Icc R hR
 
@@ -508,7 +551,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     ‖𝓕 ψ u‖ = ‖𝓕 (deriv ψ) u‖ / ‖2 * π * (u : ℂ) * Complex.I‖ := by
       have h : (2 * π * (u : ℂ) * Complex.I) ≠ 0 := by
         simp [hu, pi_ne_zero]
-      rw [← norm_neg (𝓕 (deriv ψ) u), ← fourier_deriv_eq, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
+      rw [← fourier_deriv_eq, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
     _ ≤ ((eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖)) / (2 * π * ‖u‖) := by
       have : ‖2 * π * (u : ℂ) * Complex.I‖ = 2 * π * ‖u‖ := by
         simp [abs_eq_self.mpr pi_nonneg]
