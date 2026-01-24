@@ -363,12 +363,42 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     ∀ R : ℝ, R > 0 →
       (2 * π * (u : ℂ) * Complex.I) *
         (∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v ∂volume)
-      = ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)
-        - ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)
-        - ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume := by
+      = ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume
+        - (ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)
+        - ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)) := by
     -- AGENT TASK: prove classical IBP on compact interval using `habscont` and smoothness of the
     -- exponential kernel. Prefer an existing `interval_integral.integral_by_parts` lemma if present.
-    sorry
+    intro R hR
+    let g : ℝ → ℂ := fun v => Complex.exp (↑(-2 * π * v * u) * Complex.I)
+    have hg : ∀ v, HasDerivAt g (↑(-2 * π * u) * Complex.I * g v) v := by
+      intro v
+      convert (HasDerivAt.mul_const (hasDerivAt_id v).ofReal_comp (↑(-2 * π * u) * Complex.I)).cexp using 1
+      · ext x; dsimp [g]; congr 1; push_cast; ring
+      · dsimp [g]; push_cast; ring_nf
+    have h_int : ∫ v in Icc (-R) R, g v • ψ v = ∫ v in (-R)..R, g v • ψ v := by
+      rw [intervalIntegral.integral_of_le (by linarith), MeasureTheory.integral_Icc_eq_integral_Ioc]
+    have h_int' : ∫ v in Icc (-R) R, g v • deriv ψ v = ∫ v in (-R)..R, g v • deriv ψ v := by
+      rw [intervalIntegral.integral_of_le (by linarith), MeasureTheory.integral_Icc_eq_integral_Ioc]
+    rw [h_int, h_int']
+    have : (∫ x in (-R)..R, (2 * ↑π * ↑u * I) * (g x * ψ x)) =
+        (∫ x in (-R)..R, - (ψ x * (↑(-2 * π * u) * I * g x))) := by
+      apply intervalIntegral.integral_congr; intro x _
+      simp; ring
+
+    simp only [smul_eq_mul]
+    trans (∫ x in -R..R, (2 * ↑π * ↑u * I) * (g x * ψ x))
+    ·
+      rw [← intervalIntegral.integral_const_mul]
+    · rw [this, intervalIntegral.integral_neg,
+        intervalIntegral.integral_mul_deriv_eq_deriv_mul]
+      · simp only [mul_comm, sub_left_inj, neg_inj]
+        congr 1
+        apply intervalIntegral.integral_congr; intro x _
+        ring
+      · intro v _; apply habscont.hasDerivAt
+      · intro v _; apply hg
+      · apply (hderiv_int.mono_set (Icc_subset_univ _ _)).intervalIntegrable
+      · apply (hg.continuous).intervalIntegrable
 
   -- Step 3: let R → ∞. Show boundary terms vanish and pass to limit on the ψ' integral.
   have tendsto_boundary_zero :
@@ -391,8 +421,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     · apply ae_of_all; intro v
       simp [Complex.norm_exp]
 
-  -- Step 4: pass limit in the IBP identity as R → ∞ to obtain (2π i u) · 𝓕 ψ u = - 𝓕 (deriv ψ) u
-  have fourier_deriv_eq : (2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u = - 𝓕 (deriv ψ) u := by
+  have fourier_deriv_eq : (2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u = 𝓕 (deriv ψ) u := by
     have h_LHS : Tendsto (fun R => (2 * π * (u : ℂ) * Complex.I) *
         ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v) atTop
         (𝓝 ((2 * π * (u : ℂ) * Complex.I) * 𝓕 ψ u)) := by
@@ -405,16 +434,15 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
           fun_prop
         · apply ae_of_all; intro v
           rw [neg_mul, Complex.norm_exp_ofReal_mul_I]
-
-
       exact (aecover_Icc tendsto_neg_atTop_atBot tendsto_id).integral_tendsto_of_countably_generated h_int
 
     rw [Real.fourier_real_eq_integral_exp_smul (deriv ψ) u]
     refine tendsto_nhds_unique h_LHS ?_
-    apply (tendsto_congr' (f₂ := fun R => ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I) -
-        ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I) -
-        ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • deriv ψ v) ?_).mpr
-    · have := tendsto_boundary_zero.1.sub tendsto_boundary_zero.2 |>.sub integral_ψ'_converge
+    apply (tendsto_congr' (f₂ := fun R =>
+        ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • deriv ψ v -
+        (ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I) -
+        ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I))) ?_).mpr
+    · have := integral_ψ'_converge.sub tendsto_boundary_zero.1 |>.add tendsto_boundary_zero.2
       simpa using this
     · filter_upwards [Ioi_mem_atTop 0] with R hR
       exact ibp_on_Icc R hR
@@ -428,7 +456,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     ‖𝓕 ψ u‖ = ‖𝓕 (deriv ψ) u‖ / ‖2 * π * (u : ℂ) * Complex.I‖ := by
       have h : (2 * π * (u : ℂ) * Complex.I) ≠ 0 := by
         simp [hu, pi_ne_zero]
-      rw [← norm_neg (𝓕 (deriv ψ) u), ← fourier_deriv_eq, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
+      rw [← fourier_deriv_eq, norm_mul, mul_div_cancel_left₀ _ (norm_ne_zero_iff.mpr h)]
     _ ≤ ((eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖)) / (2 * π * ‖u‖) := by
       have : ‖2 * π * (u : ℂ) * Complex.I‖ = 2 * π * ‖u‖ := by
         simp [abs_eq_self.mpr pi_nonneg]
