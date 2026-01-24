@@ -377,7 +377,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     -- AGENT TASK: prove from `habscont` + `hψ` that ψ(t)→0 as t→±∞; then multiply by bounded unit modulus exponential.
     constructor
     · apply?
-    ·
+    · apply?
     sorry
 
   have integral_ψ'_converge :
