@@ -407,21 +407,33 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     let E := fun v : ℝ ↦ cexp (↑(-2 * π * v * u) * I)
 
     -- 2. Establish properties of E (Differentiable everywhere)
+    have : DifferentiableAt ℝ (fun y ↦ ↑(-2 * π * y * u)) x := by
+      sorry
     have hE_diff : Differentiable ℝ E := by
       intro x
       apply DifferentiableAt.cexp
+      -- Prove the inside is differentiable (linear)
       apply DifferentiableAt.mul_const
-      apply DifferentiableAt.comp (g := Complex.ofReal) _ (by fun_prop)
-      exact Complex.ofRealCLM.differentiableAt
+      apply DifferentiableAt.comp (g := Complex.ofReal)
+      · apply Differentiable.differentiableAt
+        intro z
+        exact HasDerivAt.differentiableAt <| HasDerivAt.ofReal_comp (hasDerivAt_id z)
+      · fun_prop
     have hE_deriv : ∀ v, deriv E v = ↑(-2 * π * u) * I * E v := by
       intro v
       simp only [E]
       rw [deriv_cexp]
-      · simp only [deriv_mul_const_field, deriv_mul_const, deriv_neg, deriv_id'', Complex.deriv_ofReal, mul_one]
+      · simp
         ring
-      · apply DifferentiableAt.mul_const
-        apply DifferentiableAt.comp (g := Complex.ofReal) _ (by fun_prop)
-        exact Complex.ofRealCLM.differentiableAt
+      · refine (DifferentiableAt.comp (x := v)
+          (g := fun z : ℝ => (↑z : ℂ) * I)
+          (f := fun y : ℝ => -2 * π * y * u)
+          ?_ ?_)
+        apply DifferentiableAt.mul_const
+        apply DifferentiableAt.comp (g := Complex.ofReal)
+        · exact (HasDerivAt.ofReal_comp (hasDerivAt_id ((fun y ↦ -2 * π * y * u) v))).differentiableAt
+        · fun_prop
+        · fun_prop
 
 
     -- 3. Establish AC of the product (ψ * E)
