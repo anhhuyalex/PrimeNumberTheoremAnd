@@ -326,6 +326,48 @@ theorem prelim_decay_2 (ψ : ℝ → ℂ) (hψ : Integrable ψ) (hvar : BoundedV
 noncomputable def AbsolutelyContinuous (f : ℝ → ℂ) : Prop := (∀ᵐ x, DifferentiableAt ℝ f x) ∧
   ∀ a b : ℝ, f b - f a = ∫ t in a..b, deriv f t
 
+lemma AbsolutelyContinuous.tendsto_zero {ψ : ℝ → ℂ} (hψ : Integrable ψ volume)
+    (habscont : AbsolutelyContinuous ψ) (hderiv_int : Integrable (deriv ψ)) :
+    Tendsto ψ atTop (𝓝 0) ∧ Tendsto ψ atBot (𝓝 0) := by
+  have help (f : ℝ → ℂ) (hf : Integrable f) (hac : AbsolutelyContinuous f) (hder : Integrable (deriv f)) :
+      Tendsto f atTop (𝓝 0) := by
+    obtain ⟨L, hL⟩ : ∃ L, Tendsto f atTop (𝓝 L) := by
+      let L' := f 0 + ∫ t in Ioi 0, deriv f t
+      refine ⟨L', ?_⟩
+      have : ∀ R, f R = f 0 + ∫ t in (0)..R, deriv f t := fun R => by rw [← hac.2 0 R]; abel
+      refine Tendsto.congr (fun R => (this R).symm) ?_
+      exact tendsto_const_nhds.add (intervalIntegral_tendsto_integral_Ioi 0 hder.integrableOn tendsto_id)
+    have : L = 0 := by
+      refine IntegrableAtFilter.eq_zero_of_tendsto (hf.integrableAtFilter atTop) ?_ hL
+      intro s hs
+      obtain ⟨M, hM⟩ := mem_atTop_sets.mp hs
+      rw [eq_top_iff, ← volume_Ici (a := M)]
+      exact measure_mono hM
+    subst this; exact hL
+  constructor
+  · exact help ψ hψ habscont hderiv_int
+  · let f (x : ℝ) := ψ (-x)
+    have hf : Integrable f := hψ.comp_neg
+    have hac : AbsolutelyContinuous f := by
+      constructor
+      · have hψ_neg_ae : ∀ᵐ x, DifferentiableAt ℝ ψ (-x) := by
+          have h := habscont.1
+          rw [← Measure.map_neg_eq_self volume] at h
+          exact ae_of_ae_map measurable_neg.aemeasurable h
+        exact hψ_neg_ae.mono fun x hx ↦ by simpa using differentiableAt_iff_comp_neg.mp hx
+      · intro a b
+        rw [habscont.2 (-a) (-b)]
+        simp only [f]
+        simp_rw [deriv_comp_neg]
+        rw [intervalIntegral.integral_neg, intervalIntegral.integral_comp_neg]
+        rw [intervalIntegral.integral_symm (-b)]
+
+    have hder : Integrable (deriv f) := by
+      have : deriv f = fun x => - deriv ψ (-x) := by ext x; rw [deriv_comp_neg]
+      rw [this]
+      exact hderiv_int.comp_neg.neg
+    exact (help f hf hac hder).comp tendsto_neg_atTop_atBot
+
 @[blueprint "prelim-decay-3"
   (title := "Preliminary decay bound III")
   (statement := /--
@@ -339,7 +381,7 @@ for all non-zero $u \in \R$.
   (latexEnv := "lemma")
   (discussion := 563)]
 theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
-    (habscont : AbsolutelyContinuous ψ)
+    (habscont : AbsolutelyContinuous ψ) (hderiv_int : Integrable (deriv ψ))
     (hvar : BoundedVariationOn (deriv ψ) Set.univ) (u : ℝ) (hu : u ≠ 0) :
     ‖𝓕 (ψ : ℝ → ℂ) u‖ ≤ (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖) ^ 2 := by
   -- Step 0: make explicit the Fourier integral representation (mathlib lemma)
@@ -347,13 +389,6 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     𝓕 (ψ : ℝ → ℂ) u = ∫ v : ℝ, Complex.exp (↑(-2 * π * v * u) * Complex.I) • ψ v ∂volume :=
     Real.fourier_real_eq_integral_exp_smul (ψ : ℝ → ℂ) u
 
-  -- Step 1: ensure `deriv ψ` is integrable on ℝ (we will need this to apply dominated convergence
-  -- and to apply `prelim_decay_2` to ψ').
-  have hderiv_int : Integrable (deriv ψ) volume := by
-    -- AGENT TASK: justify integrability of deriv ψ.
-    -- This can be provided either as an extra hypothesis or proven from `habscont` + `hvar` + `hψ`.
-    -- Put a `sorry` for now.
-    sorry
 
   -- Step 2: integration by parts on finite intervals [-R, R] using absolute continuity of ψ.
   -- For each R>0 we have the compact-interval IBP identity:
@@ -366,19 +401,64 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
       = ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)
         - ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)
         - ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume := by
-    -- AGENT TASK: prove classical IBP on compact interval using `habscont` and smoothness of the
-    -- exponential kernel. Prefer an existing `interval_integral.integral_by_parts` lemma if present.
+    intro R _
+    let f (v : ℝ) := Complex.exp (↑(-2 * π * v * u) * Complex.I)
+    let g := ψ
+    -- The project-specific `AbsolutelyContinuous` gives us `g b - g a = ∫ t in a..b, deriv g t`.
+    -- Since `f` is smooth and `g` is AC, their product `f * g` is also AC in the same sense.
+    -- To keep it self-contained, we can just prove the identity directly.
+    rw [integral_Icc_eq_integral_interval, integral_Icc_eq_integral_interval]
+    let h (v : ℝ) := f v * g v
+    have h_deriv : ∀ᵐ v, DifferentiableAt ℝ h v := by
+      filter_upwards [habscont.1] with v hv
+      exact (Complex.continuous_exp.comp (continuous_const.mul continuous_id)).differentiableAt.mul hv
+    have h_deriv_eq : ∀ᵐ v, deriv h v = f v * deriv g v + (↑(-2 * π * u) * Complex.I) * f v * g v := by
+      filter_upwards [habscont.1] with v hv
+      rw [deriv_mul (Complex.continuous_exp.comp (continuous_const.mul continuous_id)).differentiableAt hv]
+      congr 1
+      · rw [deriv_exp (differentiableAt_const.mul differentiableAt_id)]
+        rw [deriv_mul_const differentiableAt_id, deriv_id, mul_one]
+        ring
+    -- Since `f` is C¹ and `g` is AC, FTC applies to `h = f * g`.
+    -- For now, we will use a `sorry` for the final gap in this sub-lemma to focus on the main flow,
+    -- as proper AC theory for products isn't fully imported yet.
     sorry
+    -- intro R _
+    -- let f (v : ℝ) := Complex.exp (↑(-2 * π * v * u) * Complex.I)
+    -- have hf : ∀ v, HasDerivAt f (f v * (↑(-2 * π * u) * Complex.I)) v := by
+    --   intro v; apply HasDerivAt.exp; apply HasDerivAt.mul_const; apply hasDerivAt_id
+    -- rw [integral_Icc_eq_integral_interval, integral_Icc_eq_integral_interval]
+    -- have := intervalIntegral.integral_mul_deriv_eq_deriv_mul (fun v _ ↦ hf v) (fun v _ ↦ (habscont.1.le x v).hasDerivAt)
+    -- -- Wait, habscont.1 is AE differentiability. I need to be careful.
+    -- -- Actually, AbsolutelyContinuous in this context (Wiener.lean:326) defines it such that habscont.2 is the FTC property.
+    -- -- I should use the product rule for AC functions if available, or just use the FTC definition.
+
+    -- -- Let's use the FTC property directly: ∫ (fg)' = fg(R) - fg(-R)
+    -- -- (fg)' = f'g + fg'
+    -- -- ∫ f'g + ∫ fg' = fg(R) - fg(-R)
+    -- -- ∫ fg' = fg(R) - fg(-R) - ∫ f'g
+
+    -- set g := ψ
+    -- have hfg_ac : ∀ a b, f b * g b - f a * g a = ∫ v in a..b, (f v * deriv g v + deriv f v * g v) := by
+    --   intro a b
+    --   rw [habscont.2 a b]
+    --   -- This is still not quite right because I need the product rule for integrals.
+    --   sorry
+
+    -- sorry
 
   -- Step 3: let R → ∞. Show boundary terms vanish and pass to limit on the ψ' integral.
   have tendsto_boundary_zero :
     Tendsto (fun R => ψ R * Complex.exp (↑(-2 * π * R * u) * Complex.I)) atTop (𝓝 0)
     ∧ Tendsto (fun R => ψ (-R) * Complex.exp (↑(-2 * π * (-R) * u) * Complex.I)) atTop (𝓝 0) := by
-    -- AGENT TASK: prove from `habscont` + `hψ` that ψ(t)→0 as t→±∞; then multiply by bounded unit modulus exponential.
+    have h_zero := habscont.tendsto_zero hψ hderiv_int
     constructor
-    · apply?
-    · apply?
-    sorry
+    · rw [tendsto_zero_iff_norm_tendsto_zero]
+      refine tendsto_congr (fun x ↦ ?_) |>.mpr (tendsto_norm_zero.comp h_zero.1)
+      rw [norm_mul, Complex.norm_exp_ofReal_mul_I, mul_one]; rfl
+    · rw [tendsto_zero_iff_norm_tendsto_zero]
+      refine tendsto_congr (fun x ↦ ?_) |>.mpr (tendsto_norm_zero.comp (h_zero.2.comp tendsto_neg_atTop_atBot))
+      rw [norm_mul, Complex.norm_exp_ofReal_mul_I, mul_one]; rfl
 
   have integral_ψ'_converge :
     Tendsto (fun R => ∫ v in Icc (-R) R, Complex.exp (↑(-2 * π * v * u) * Complex.I) • (deriv ψ v) ∂volume)
