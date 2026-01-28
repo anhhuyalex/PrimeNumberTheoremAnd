@@ -100,15 +100,156 @@ while
   (discussion := 546)]
 theorem lemma_aachIBP (s : ℂ) (hsigma : 0 ≤ s.re) (ν : ℝ) (hν : ν ≠ 0) (a b : ℝ)
     (ha : a > |s.im| / (2 * π * |ν|)) (hb : b > a) :
-    let φ : ℝ → ℝ := fun t ↦ ν * t - (s.im / (2 * π)) * Real.log t
-    let Φ : ℝ → ℂ := fun t ↦
+  let φ : ℝ → ℝ := fun t ↦ ν * t - (s.im / (2 * π)) * Real.log t
+  let Φ : ℝ → ℂ := fun t ↦
       (t ^ (-s.re) : ℝ) * e (φ t) / (2 * π * I * (deriv φ t))
     ∫ t in Set.Icc a b, t ^ (-s) * e (ν * t) = Φ b - Φ a +
       s.re * ∫ t in Set.Icc a b,
         (t ^ (-s.re - 1) : ℝ) / (2 * π * I * (deriv φ t)) * e (φ t) +
       ∫ t in Set.Icc a b, (t ^ (-s.re) : ℝ) * (deriv (deriv φ) t) /
         (2 * π * I * (deriv φ t) ^ 2) * e (φ t) := by
+  intro φ Φ
+  have hφ_deriv (t : ℝ) (ht : t ∈ Set.Icc a b) : deriv φ t = ν - s.im / (2 * π * t) := by
+    rw [deriv_sub, deriv_mul_const_field, deriv_const_mul, deriv_log, mul_one, mul_one_div]
+    · simp
+    · simp only [differentiableAt_const_mul_iff_differentiableAt, differentiableAt_log_iff, ne_eq]
+      linarith [ht.1]
+    · apply DifferentiableAt.const_mul
+      exact differentiableAt_id'
+    · apply DifferentiableAt.mul_const
+      apply DifferentiableAt.log
+      · exact differentiableAt_id'
+      · linarith [ht.1]
+
+  have hφ_deriv_ne_zero (t : ℝ) (ht : t ∈ Set.Icc a b) : deriv φ t ≠ 0 := by
+    rw [hφ_deriv t ht, ne_eq, sub_eq_zero]
+    intro h
+    have : |ν| = |s.im / (2 * π * t)| := by rw [h, abs_abs]
+    rw [abs_div, abs_mul, abs_of_nonneg (by norm_num : 0 ≤ 2 * π), abs_of_pos (lt_of_lt_of_le a_pos ht.1)] at this
+    have : |ν| ≤ |s.im| / (2 * π * a) := by
+      rw [this]
+      gcongr
+      exact ht.1
+    have : |s.im| / (2 * π * |ν|) < a := ha
+    have : |s.im| / (2 * π * a) < |ν| := by
+      rw [div_lt_iff₀ (by linarith)]
+      nth_rw 2 [← div_mul_cancel₀ (|s.im|) (abs_ne_zero.mpr hν)]
+      gcongr
+      rwa [lt_div_iff₀ (mul_pos (by norm_num) (by linarith))] at ha
+    linarith
+    sorry
+
+  let u : ℝ → ℂ := fun t ↦ (t ^ (-s.re) : ℝ) / (2 * π * I * deriv φ t)
+  let v : ℝ → ℂ := fun t ↦ e (φ t)
+
+  have hφ_diff : DifferentiableOn ℝ φ (Set.Icc a b) := fun t ht ↦ by
+    apply DifferentiableAt.differentiableWithinAt
+    apply DifferentiableAt.sub <;> simp only [differentiableAt_const_mul_iff_differentiableAt, differentiableAt_mul_const_iff]
+    · exact differentiableAt_id'
+    · apply DifferentiableAt.log (differentiableAt_id') (by linarith [ht.1])
+
+  have hv_diff : DifferentiableOn ℝ v (Set.Icc a b) := by
+    apply DifferentiableOn.comp (g := φ)
+    · apply Differentiable.differentiableOn
+      exact Complex.differentiable_exp.comp (Differentiable.const_mul (by exact Differentiable.mul_const (by exact differentiable_id) _) _)
+    · exact hφ_diff
+    · exact mapsTo_image _ _
+
+  have hu_diff : DifferentiableOn ℝ u (Set.Icc a b) := by
+    apply DifferentiableOn.div
+    · apply DifferentiableOn.ofReal_comp
+      apply DifferentiableOn.rpow_const
+      · exact differentiableOn_id
+      · intro x hx; linarith [hx.1]
+    · apply DifferentiableOn.const_mul
+      apply DifferentiableOn.ofReal_comp
+      intro x hx
+      rw [hφ_deriv x hx]
+      apply DifferentiableAt.differentiableWithinAt
+      apply DifferentiableAt.sub (differentiableAt_const _)
+      apply DifferentiableAt.div_const
+      apply DifferentiableAt.div (differentiableAt_const _) (differentiableAt_id') (by linarith [hx.1])
+    · intro x hx
+      rw [mul_ne_zero_iff]
+      constructor
+      · norm_num
+      · rw [ofReal_ne_zero]
+        exact hφ_deriv_ne_zero x hx
+
+  have h_integrand (t : ℝ) (ht : t ∈ Set.Icc a b) :
+    t ^ (-s) * e (ν * t) = u t * deriv v t := by
+    rw [deriv_comp, deriv_e]
+    · dsimp [u, v, e]
+      rw [mul_assoc]
+      rw [div_mul_cancel₀ _ (by
+        rw [mul_ne_zero_iff, ofReal_ne_zero]
+        refine ⟨by norm_num, hφ_deriv_ne_zero t ht⟩)]
+      rw [Complex.cpow_def_of_ne_zero (by linarith [ht.1]), Complex.cpow_def_of_ne_zero (by linarith [ht.1])]
+      push_cast
+      rw [← Complex.exp_add]
+      congr 1
+      field_simp [φ]
+      ring_nf
+      simp
+    · exact hφ_diff t ht (Set.Icc_mem_nhds ht.1 ht.2)
+    · exact DifferentiableAt.hasDerivAt (Complex.differentiable_e _)
+
+  have h_u_deriv (t : ℝ) (ht : t ∈ Set.Icc a b) :
+    deriv u t = - (s.re * (t ^ (-s.re - 1) : ℝ)) / (2 * π * I * deriv φ t)
+                - ((t ^ (-s.re) : ℝ) * deriv (deriv φ) t) / (2 * π * I * (deriv φ t) ^ 2) := by
+    dsimp [u]
+    rw [deriv_div]
+    · simp only [deriv_ofReal, deriv_const_mul, deriv_mul_const_field]
+      rw [deriv_rpow_const, hφ_deriv t ht, deriv_sub, deriv_const, deriv_div_const, deriv_inv,
+        deriv_id'', atomic_one_mul, zero_sub, mul_neg, mul_one, zero_sub, sub_zero, mul_zero]
+      · field_simp
+        ring_nf
+        rw [mul_assoc (2 * π * I), mul_assoc (2 * π * I)]
+        congr
+      · linarith [ht.1]
+      · apply DifferentiableAt.sub (differentiableAt_const _)
+        apply DifferentiableAt.div_const
+        apply DifferentiableAt.inv
+        · exact differentiableAt_id'
+        · linarith [ht.1]
+      · linarith [ht.1]
+    · apply DifferentiableAt.ofReal_comp
+      apply DifferentiableAt.rpow_const (differentiableAt_id')
+      linarith [ht.1]
+    · apply DifferentiableAt.const_mul
+      apply DifferentiableAt.ofReal_comp
+      rw [hφ_deriv t ht]
+      apply DifferentiableAt.sub (differentiableAt_const _)
+      apply DifferentiableAt.div_const
+      apply DifferentiableAt.div (differentiableAt_const _) (differentiableAt_id') (by linarith [ht.1])
+    · rw [mul_ne_zero_iff]
+      refine ⟨by norm_num, ofReal_ne_zero.mpr (hφ_deriv_ne_zero t ht)⟩
+
+  rw [setIntegral_congr measurableSet_Icc h_integrand]
+  rw [integral_mul_deriv_eq_deriv_mul hu_diff hv_diff continuousOn_id.integrableOn continuousOn_id.integrableOn]
+  dsimp [u, v, Φ]
+  have : ∫ t in Set.Icc a b, deriv u t * e (φ t) =
+      ∫ t in Set.Icc a b, (- (s.re * (t ^ (-s.re - 1) : ℝ)) / (2 * π * I * deriv φ t)
+      - ((t ^ (-s.re) : ℝ) * deriv (deriv φ) t) / (2 * π * I * (deriv φ t) ^ 2)) * e (φ t) := by
+    apply setIntegral_congr measurableSet_Icc
+    intro t ht
+    rw [h_u_deriv t ht]
+  rw [this]
+  ring_nf
+  simp only [integral_neg, integral_add, integral_div, integral_mul]
+  have : ∀ (a b c : ℂ), a - (b + c) = a - b - c := by intros; ring
+  rw [this]
+  congr 1
+  · rw [← integral_mul_left]
+    apply setIntegral_congr measurableSet_Icc
+    intro t ht
+    ring_nf
+  · rw [← integral_neg]
+    apply setIntegral_congr measurableSet_Icc
+    intro t ht
+    ring_nf
   sorry
+
 
 @[blueprint
   "lem:aachra"
