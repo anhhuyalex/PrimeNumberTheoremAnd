@@ -10,6 +10,7 @@ import PrimeNumberTheoremAnd.Mathlib.Analysis.Asymptotics.Asymptotics
 import PrimeNumberTheoremAnd.Fourier
 import PrimeNumberTheoremAnd.SmoothExistence
 import Mathlib.Analysis.Convolution
+import Mathlib.MeasureTheory.Integral.IntegralEqImproper
 
 set_option lang.lemmaCmd true
 
@@ -326,49 +327,160 @@ theorem prelim_decay_2 (ψ : ℝ → ℂ) (hψ : Integrable ψ) (hvar : BoundedV
 noncomputable def AbsolutelyContinuous (f : ℝ → ℂ) : Prop := (∀ᵐ x, DifferentiableAt ℝ f x) ∧
   ∀ a b : ℝ, f b - f a = ∫ t in a..b, deriv f t
 
+lemma AbsolutelyContinuous.continuous {f : ℝ → ℂ} (hf : AbsolutelyContinuous f)
+    (hderiv : Integrable (deriv f) volume) : Continuous f := by
+  have h_rep : f = fun x => f 0 + ∫ t in 0..x, deriv f t :=
+    funext fun x => by rw [← hf.right 0 x]; simp
+  rw [h_rep]
+  apply Continuous.add
+  · exact continuous_const
+  · apply intervalIntegral.continuous_primitive
+    intro a b
+    exact hderiv.intervalIntegrable
+
+
+/-- **Integration by parts**. Version for absolutely continuous functions where derivative exists a.e. -/
+theorem ae_integral_mul_deriv_eq_deriv_mul_of_hasDerivAt
+    {A : Type*} [NormedRing A] [NormedAlgebra ℝ A] [CompleteSpace A] {u v u' v' : ℝ → A}
+    {a b : ℝ}
+    (hu : ContinuousOn u (uIcc a b)) (hv : ContinuousOn v (uIcc a b))
+    (huu' : ∀ᵐ x ∂volume, HasDerivAt u (u' x) x)
+    (hvv' : ∀ x ∈ Ioo (min a b) (max a b), HasDerivAt v (v' x) x)
+    (hu' : IntervalIntegrable u' volume a b) (hv' : IntervalIntegrable v' volume a b) :
+    ∫ x in a..b, u x * v' x = u b * v b - u a * v a - ∫ x in a..b, u' x * v x := sorry
+
+lemma AbsolutelyContinuous.mul_aux {f g : ℝ → ℂ} (hf : AbsolutelyContinuous f)
+    (hg : Differentiable ℝ g) (hf' : Integrable (deriv f) volume)
+    (hg' : Continuous (deriv g)) (a b : ℝ) (hab : a ≤ b) :
+    (f * g) b - (f * g) a = ∫ x in a..b, deriv (f * g) x := by
+  rw [intervalIntegral.integral_congr_ae_restrict (ae_restrict_of_ae (hf.1.mono fun x hx => deriv_mul hx (hg x)))]
+  have h_int1 : IntervalIntegrable (fun x => deriv f x * g x) volume a b :=
+    hf'.intervalIntegrable.mul_continuousOn hg.continuous.continuousOn
+  have h_int2 : IntervalIntegrable (fun x => f x * deriv g x) volume a b :=
+    (hf.continuous hf').continuousOn.intervalIntegrable.mul_continuousOn hg'.continuousOn
+  rw [intervalIntegral.integral_add h_int1 h_int2]
+  -- Calculate the second integral using Fubini
+  -- Calculate the second integral using Fubini
+  have h_sub : ∫ x in a..b, f x * deriv g x = f a * (g b - g a) + ∫ t in a..b, deriv f t * (g b - g t) := by
+    have h_eq : ∀ x ∈ uIcc a b, f x = f a + ∫ t in a..x, deriv f t := fun x _ ↦ by rw [← hf.2, add_sub_cancel]
+    rw [intervalIntegral.integral_congr (fun x hx ↦ by rw [h_eq x hx])]
+    -- Distribute multiplication
+    have trim : ∫ x in a..b, (f a + ∫ t in a..x, deriv f t) * deriv g x = ∫ x in a..b, f a * deriv g x + (∫ t in a..x, deriv f t) * deriv g x := by
+      apply intervalIntegral.integral_congr; intro x _; ring
+    rw [trim, intervalIntegral.integral_add]
+    · rw [intervalIntegral.integral_const_mul]
+      · rw [intervalIntegral.integral_deriv_eq_sub (fun x _ ↦ hg x) (hg'.intervalIntegrable a b)]
+        · ring_nf; congr 1
+          -- Fubini on the triangle
+          rw [intervalIntegral.integral_of_le hab, intervalIntegral.integral_of_le hab]
+          -- Convert to Bochner integral on Ioc a b
+          -- 1. Convert set integrals (Ioc) to interval integrals (a..b)
+          rw [←intervalIntegral.integral_of_le hab]
+          rw [←intervalIntegral.integral_of_le hab]
+          have h_inner : ∀ x ∈ Icc a b, ∫ t in a..x, deriv f t = f x - f a := by
+            intro x hx
+            -- Since a ≤ b, uIcc a b is exactly Icc a b
+            have hx_uIcc : x ∈ uIcc a b := by rwa [Set.uIcc_of_le hab]
+            -- Now use h_eq and solve for the integral
+            rw [h_eq x hx_uIcc]
+            ring
+
+          calc
+            -- Step 1: Substitute the inner integral
+            ∫ (x : ℝ) in a..b, (∫ (t : ℝ) in a..x, deriv f t) * deriv g x
+              = ∫ (x : ℝ) in a..b, (f x - f a) * deriv g x := by
+              apply intervalIntegral.integral_congr
+              intro x hx
+              rw [Set.uIcc_of_le hab] at hx
+              simp [h_inner x hx]
+
+            -- Step 2: Linearity
+            _ = (∫ (x : ℝ) in a..b, f x * deriv g x) - (∫ (x : ℝ) in a..b, f a * deriv g x) := by
+              simp_rw [sub_mul]
+              rw [intervalIntegral.integral_sub]
+              · exact h_int2
+              · exact (hg'.continuousOn.intervalIntegrable).const_mul (f a)
+            -- Step 3: Pull out constant and FTC
+            _ = (∫ (x : ℝ) in a..b, f x * deriv g x) - f a * (g b - g a) := by
+              congr
+              rw [intervalIntegral.integral_const_mul]
+              congr
+              refine intervalIntegral.integral_deriv_eq_sub (fun x a ↦ hg x) (hg'.continuousOn.intervalIntegrable)
+            -- Step 4: IBP
+            _ = (f b * g b - f a * g a - ∫ (x : ℝ) in a..b, deriv f x * g x) - f a * (g b - g a) := by
+              congr
+              apply ae_integral_mul_deriv_eq_deriv_mul_of_hasDerivAt
+              · exact (hf.continuous hf').continuousOn
+              · exact hg.continuous.continuousOn
+              · exact hf.1.mono fun x hx ↦ hx.hasDerivAt
+              · exact fun x _ ↦ hg.differentiableAt.hasDerivAt
+              · exact hf'.intervalIntegrable
+              · exact hg'.continuousOn.intervalIntegrable
+
+
+            -- Step 5: Simplify algebraic expression
+            _ = f b * g b - f a * g b - ∫ (x : ℝ) in a..b, deriv f x * g x := by
+              ring
+
+            -- Step 6: Transform RHS
+            _ = ∫ (x : ℝ) in a..b, g b * deriv f x - deriv f x * g x := by
+              rw [intervalIntegral.integral_sub]
+              · rw [intervalIntegral.integral_const_mul]
+                rw [← hf.2 a b]
+                ring
+              · apply IntervalIntegrable.const_mul
+                exact hf'.intervalIntegrable
+              · exact h_int1
+    · exact (hg'.const_mul (f a)).intervalIntegrable a b
+    · exact ((intervalIntegral.continuous_primitive (fun _ _ ↦ hf'.intervalIntegrable) a).mul hg').intervalIntegrable a b
+  rw [h_sub]
+  simp_rw [mul_sub]
+  rw [intervalIntegral.integral_sub (hf'.intervalIntegrable.mul_const (g b)) h_int1]
+  rw [intervalIntegral.integral_mul_const]
+  rw [← hf.2 a b]
+  ring
+  simp
+  ring
+
+lemma AbsolutelyContinuous.mul {f g : ℝ → ℂ} (hf : AbsolutelyContinuous f)
+    (hg : Differentiable ℝ g) (hf' : Integrable (deriv f) volume)
+    (hg' : Continuous (deriv g)) : AbsolutelyContinuous (f * g) := by
+  constructor
+  · filter_upwards [hf.1] with x hx
+    exact hx.mul (hg x)
+  · intro a b
+    by_cases hab : a ≤ b
+    · exact mul_aux hf hg hf' hg' a b hab
+    · -- case neg: a > b
+      rw [intervalIntegral.integral_symm b a]
+      rw [← neg_sub]
+      rw [mul_aux hf hg hf' hg' b a (not_le.mp hab).le]
+      -- ring
+
+
+
 lemma AbsolutelyContinuous.tendsto_zero {ψ : ℝ → ℂ} (hψ : Integrable ψ volume)
     (habscont : AbsolutelyContinuous ψ) (hderiv_int : Integrable (deriv ψ)) :
     Tendsto ψ atTop (𝓝 0) ∧ Tendsto ψ atBot (𝓝 0) := by
-  have help (f : ℝ → ℂ) (hf : Integrable f) (hac : AbsolutelyContinuous f) (hder : Integrable (deriv f)) :
-      Tendsto f atTop (𝓝 0) := by
-    obtain ⟨L, hL⟩ : ∃ L, Tendsto f atTop (𝓝 L) := by
-      let L' := f 0 + ∫ t in Ioi 0, deriv f t
-      refine ⟨L', ?_⟩
-      have : ∀ R, f R = f 0 + ∫ t in (0)..R, deriv f t := fun R => by rw [← hac.2 0 R]; abel
-      refine Tendsto.congr (fun R => (this R).symm) ?_
-      exact tendsto_const_nhds.add (intervalIntegral_tendsto_integral_Ioi 0 hder.integrableOn tendsto_id)
-    have : L = 0 := by
-      refine IntegrableAtFilter.eq_zero_of_tendsto (hf.integrableAtFilter atTop) ?_ hL
-      intro s hs
-      obtain ⟨M, hM⟩ := mem_atTop_sets.mp hs
-      rw [eq_top_iff, ← volume_Ici (a := M)]
-      exact measure_mono hM
-    subst this; exact hL
+  have f_rep (x : ℝ) : ψ x = ψ 0 + ∫ t in 0..x, deriv ψ t := by
+    rw [← habscont.2 0 x]
+    abel
   constructor
-  · exact help ψ hψ habscont hderiv_int
-  · let f (x : ℝ) := ψ (-x)
-    have hf : Integrable f := hψ.comp_neg
-    have hac : AbsolutelyContinuous f := by
-      constructor
-      · have hψ_neg_ae : ∀ᵐ x, DifferentiableAt ℝ ψ (-x) := by
-          have h := habscont.1
-          rw [← Measure.map_neg_eq_self volume] at h
-          exact ae_of_ae_map measurable_neg.aemeasurable h
-        exact hψ_neg_ae.mono fun x hx ↦ by simpa using differentiableAt_iff_comp_neg.mp hx
-      · intro a b
-        rw [habscont.2 (-a) (-b)]
-        simp only [f]
-        simp_rw [deriv_comp_neg]
-        rw [intervalIntegral.integral_neg, intervalIntegral.integral_comp_neg]
-        rw [intervalIntegral.integral_symm (-b)]
-
-    have hder : Integrable (deriv f) := by
-      have : deriv f = fun x => - deriv ψ (-x) := by ext x; rw [deriv_comp_neg]
-      rw [this]
-      exact hderiv_int.comp_neg.neg
-    convert (help f hf hac hder).comp tendsto_neg_atBot_atTop using 1
-    ext x
-    simp [f]
+  · let h_int := intervalIntegral_tendsto_integral_Ioi 0 hderiv_int.integrableOn tendsto_id
+    have hL : Tendsto ψ atTop (𝓝 (ψ 0 + ∫ t in Ioi 0, deriv ψ t)) :=
+      (tendsto_const_nhds.add h_int).congr (fun x => (f_rep x).symm)
+    refine IntegrableAtFilter.eq_zero_of_tendsto (hψ.integrableAtFilter atTop) (?_) hL |>.symm ▸ hL
+    intro s hs
+    rcases Filter.eventually_atTop.1 hs with ⟨a, ha⟩
+    exact eq_top_iff.mpr (Real.volume_Ici.symm.le.trans (measure_mono ha))
+  · let h_int := intervalIntegral_tendsto_integral_Iic 0 hderiv_int.integrableOn tendsto_id
+    have hL : Tendsto ψ atBot (𝓝 (ψ 0 - ∫ t in Iic 0, deriv ψ t)) :=
+      (tendsto_const_nhds.sub h_int).congr fun x ↦ by
+        dsimp; rw [f_rep x, intervalIntegral.integral_symm, sub_neg_eq_add]
+    refine IntegrableAtFilter.eq_zero_of_tendsto (hψ.integrableAtFilter atBot) ?_ hL |>.symm ▸ hL
+    intro s hs
+    rcases Filter.eventually_atBot.1 hs with ⟨a, ha⟩
+    exact eq_top_iff.mpr (Real.volume_Iic.symm.le.trans (measure_mono ha))
 
 
 @[blueprint "prelim-decay-3"
@@ -384,7 +496,7 @@ for all non-zero $u \in \R$.
   (latexEnv := "lemma")
   (discussion := 563)]
 theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
-    (habscont : AbsolutelyContinuous ψ) (hderiv_int : Integrable (deriv ψ))
+    (habscont : AbsolutelyContinuous ψ)
     (hvar : BoundedVariationOn (deriv ψ) Set.univ) (u : ℝ) (hu : u ≠ 0) :
     ‖𝓕 (ψ : ℝ → ℂ) u‖ ≤ (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖) ^ 2 := by
   -- Step 0: make explicit the Fourier integral representation (mathlib lemma)
@@ -407,49 +519,45 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
     let E := fun v : ℝ ↦ cexp (↑(-2 * π * v * u) * I)
 
     -- 2. Establish properties of E (Differentiable everywhere)
-    have : DifferentiableAt ℝ (fun y ↦ ↑(-2 * π * y * u)) x := by
-      sorry
+    have h_inner : Differentiable ℝ (fun y ↦ Complex.ofReal (-2 * π * y * u)) := by
+      intro x
+      exact (HasDerivAt.ofReal_comp (by apply HasDerivAt.mul_const; apply HasDerivAt.const_mul; apply hasDerivAt_id)).differentiableAt
     have hE_diff : Differentiable ℝ E := by
       intro x
       apply DifferentiableAt.cexp
-      -- Prove the inside is differentiable (linear)
       apply DifferentiableAt.mul_const
-      apply DifferentiableAt.comp (g := Complex.ofReal)
-      · apply Differentiable.differentiableAt
-        intro z
-        exact HasDerivAt.differentiableAt <| HasDerivAt.ofReal_comp (hasDerivAt_id z)
-      · fun_prop
+      exact h_inner x
     have hE_deriv : ∀ v, deriv E v = ↑(-2 * π * u) * I * E v := by
       intro v
       simp only [E]
       rw [deriv_cexp]
       · simp
         ring
-      · refine (DifferentiableAt.comp (x := v)
-          (g := fun z : ℝ => (↑z : ℂ) * I)
-          (f := fun y : ℝ => -2 * π * y * u)
-          ?_ ?_)
-        apply DifferentiableAt.mul_const
-        apply DifferentiableAt.comp (g := Complex.ofReal)
-        · exact (HasDerivAt.ofReal_comp (hasDerivAt_id ((fun y ↦ -2 * π * y * u) v))).differentiableAt
-        · fun_prop
-        · fun_prop
+      · apply DifferentiableAt.mul_const
+        exact h_inner v
 
 
     -- 3. Establish AC of the product (ψ * E)
     -- Since ψ is AC on Univ, it is AC on the interval. E is Smooth, so AC.
-    have h_prod_AC : AbsolutelyContinuousOn (fun v ↦ ψ v * E v) (Icc (-R) R) := by
-      apply AbsolutelyContinuousOn.mul
-      · exact habscont.absolutelyContinuousOn
-      · -- E is Lipschitz/Differentiable on compact interval
-        apply DifferentiableOn.absolutelyContinuousOn
-        apply hE_diff.differentiableOn
+    -- 3. Establish AC of the product (ψ * E)
+    -- Since ψ is AC on Univ, it is AC on the interval. E is Smooth, so AC.
+    have h_prod_AC : AbsolutelyContinuous (fun v ↦ ψ v * E v) := by
+      let f := ψ
+      let g := E
+      have hf' : Integrable (deriv f) volume := sorry
+      have hg_diff : Differentiable ℝ g := hE_diff
+      have hg_deriv_cont : Continuous (deriv g) := by
+        have h_eq : deriv g = fun v => ↑(-2 * π * u) * I * g v := funext hE_deriv
+        rw [h_eq]
+        fun_prop
+      exact AbsolutelyContinuous.mul habscont hg_diff hf' hg_deriv_cont
+
 
     -- 4. Establish Integrability of the components
     -- E is continuous, so IntervalIntegrable
     have hE_int : IntervalIntegrable E volume (-R) R :=
       (hE_diff.continuous.intervalIntegrable _ _)
-
+    have aisj : (Integrable (sorry)) := sorry
     -- 5. Main Calculation
     rw [eq_comm]
     calc
@@ -458,25 +566,56 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
 
       -- Apply FTC: Boundary = ∫ (ψ * E)'
       = (∫ v in Icc (-R) R, E v * deriv ψ v) - ∫ v in Icc (-R) R, deriv (fun x ↦ ψ x * E x) v := by
+        congr 1
         rw [integral_Icc_eq_integral_Ioc, ← intervalIntegral.integral_of_le (by linarith)]
-        rw [intervalIntegral.integral_deriv_eq_sub]
-        · exact h_prod_AC
-        · exact h_prod_AC.integrableOn_deriv
+        exact h_prod_AC.2 (-R) R
 
       -- Combine integrals: ∫ A - ∫ B = ∫ (A - B)
       _ = ∫ v in Icc (-R) R, (E v * deriv ψ v - deriv (fun x ↦ ψ x * E x) v) := by
         rw [integral_sub]
-        · apply hderiv_int.integrableOn.bdd_mul (hE_diff.continuous.aestronglyMeasurable)
-          use 1; apply ae_of_all; intro x; simp [E, Complex.norm_exp_ofReal_mul_I]
-        · exact h_prod_AC.integrableOn_deriv
+
+              -- Goal 1: Prove E * ψ' is integrable on [-R, R]
+        · simp_rw [mul_comm] -- Fix the type mismatch by putting the integrable function first
+          apply IntegrableOn.mul_continuousOn
+          · exact hderiv_int.integrableOn
+          · exact hE_diff.continuous.continuousOn
+          · exact isCompact_Icc
+
+        -- Goal 2: Prove (ψ * E)' is integrable on [-R, R]
+        · -- Replace the derivative with the expanded sum almost everywhere
+          apply IntegrableOn.congr_fun_ae (f := fun v ↦ deriv ψ v * E v + ψ v * deriv E v)
+
+          -- Subgoal 2a: Prove the expanded sum is integrable
+          · apply Integrable.add
+            -- Term 1: ψ' * E (same as Goal 1)
+            · apply IntegrableOn.mul_continuousOn
+                (hderiv_int.integrableOn) (hE_diff.continuous.continuousOn) (isCompact_Icc)
+            -- Term 2: ψ * E'
+            · apply ContinuousOn.integrableOn_Icc
+              apply ContinuousOn.mul
+              -- ψ is continuous (implied by Absolute Continuity / FTC)
+              · exact (habscont.continuous hderiv_int).continuousOn
+
+              -- E' is continuous (E is smooth)
+              · rw [show deriv E = fun v => ↑(-2 * π * u) * I * E v from funext hE_deriv]
+                exact continuousOn_const.mul hE_diff.continuous.continuousOn
+
+          -- Subgoal 2b: Prove the equality almost everywhere
+          · filter_upwards [ae_restrict_of_ae habscont.1] with v hv_diff
+            symm
+            exact deriv_mul hv_diff hE_diff.differentiableAt
 
       -- Expand product rule inside the integral
       _ = ∫ v in Icc (-R) R, (E v * deriv ψ v - (deriv ψ v * E v + ψ v * deriv E v)) := by
         apply integral_congr_ae
-        filter_upwards [habscont.aestronglyMeasurable.aemeasurable.ae_differentiableWithinAt] with v hv
+
+
+
+        filter_upwards [ae_restrict_of_ae habscont.1] with v hv_diff
         -- Use product rule for derivatives
-        rw [deriv_mul hv (hE_diff v)]
-        ring
+        -- simp only [deriv_mul hv_diff hE_diff.differentiableAt]
+        rw [← Pi.mul_def]
+        rw [deriv_mul hv_diff hE_diff.differentiableAt]
 
       -- Simplify algebra: (E*ψ' - (ψ'*E + ψ*E')) = -ψ*E'
       _ = ∫ v in Icc (-R) R, -(ψ v * deriv E v) := by
@@ -548,17 +687,12 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
       ext y
       simp only [mul_comm]
       simp only [mul_neg, ofReal_neg, ofReal_mul, ofReal_ofNat, smul_eq_mul, neg_mul, neg_neg]
-      · simp [sub_eq_add_neg, neg_sub, add_assoc]
+      · simp [sub_eq_add_neg, add_assoc]
         ring
       · simp
     · filter_upwards [Ioi_mem_atTop 0] with R hR
       exact ibp_on_Icc R hR
 
-  -- Step 5: apply Lemma 2.1.4 to deriv ψ (prelim_decay_2).
-  have bound_deriv := prelim_decay_2 (deriv ψ) (hderiv_int) (hvar) u hu
-  -- `bound_deriv` : ‖𝓕 (deriv ψ) u‖ ≤ (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖)
-
-  -- Step 6: combine algebraically using the fourier_deriv_eq identity.
   calc
     ‖𝓕 ψ u‖ = ‖𝓕 (deriv ψ) u‖ / ‖2 * π * (u : ℂ) * Complex.I‖ := by
       have h : (2 * π * (u : ℂ) * Complex.I) ≠ 0 := by
@@ -568,7 +702,7 @@ theorem prelim_decay_3 (ψ : ℝ → ℂ) (hψ : Integrable ψ)
       have : ‖2 * π * (u : ℂ) * Complex.I‖ = 2 * π * ‖u‖ := by
         simp [abs_eq_self.mpr pi_nonneg]
       rw [this]
-      exact div_le_div_of_nonneg_right bound_deriv (by positivity)
+      exact div_le_div_of_nonneg_right (prelim_decay_2 (deriv ψ) hderiv_int hvar u hu) (by positivity)
     _ = (eVariationOn (deriv ψ) Set.univ).toReal / (2 * π * ‖u‖) ^ 2 := by
       ring
 
