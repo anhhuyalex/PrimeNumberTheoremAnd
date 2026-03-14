@@ -216,14 +216,63 @@ theorem prop_2_3 {a : ℕ → ℂ} {T β : ℝ} (hT : 0 < T) (hβ : 1 < β)
     {G : ℂ → ℂ} (hG : ContinuousOn G { z | z.re ≥ 1 ∧ z.im ∈ Set.Icc (-T) T })
     (hG' : Set.EqOn G (fun s ↦ ∑' n, a n / n ^ s - 1 / (s - 1)) { z | z.re > 1 })
     {φ : ℝ → ℂ} (hφ_mes : Measurable φ) (hφ_int : Integrable φ)
+    (hφ_cont : ContinuousAt φ 0)
     (hφ_supp : ∀ x, x ∉ Set.Icc (-1) 1 → φ x = 0)
     (hφ_Fourier : ∃ C : ℝ, ∀ y : ℝ, y ≠ 0 → ‖𝓕 φ y‖ ≤ C / |y| ^ β)
     (x : ℝ) (hx : 0 < x) :
     (1 / (2 * π)) * ∑' (n : ℕ+), a n * (x / n) * 𝓕 φ ((T / (2 * π)) * log (n / x)) =
       (1 / (2 * π * T)) *
-        ∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I) +
+        (∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I)) +
       (φ 0 - ∫ y in Set.Iic (-T * log x / (2 * π)), 𝓕 φ y) * (x / T) := by
-  sorry
+
+  let L (sig : ℝ) : ℂ := (1 / (2 * π)) * ∑' (n : ℕ), (x : ℂ) * LSeries.term a sig n * 𝓕 φ ((T / (2 * π)) * log (n / x))
+  let I₁ (sig : ℝ) : ℂ := (1 / (2 * π * T)) * (∫ t in Set.Icc (-T) T, φ (t / T) * G (sig + t * I) * x ^ (1 + t * I))
+  let I₂ (sig : ℝ) : ℂ := (x ^ (2 - sig) / (2 * π * T) : ℝ) * (∫ u in Set.Ici (-log x), Real.exp (-u * (sig - 1)) * 𝓕 (fun t : ℝ ↦ φ (t / T)) (u / (2 * π)))
+
+  have step1 (sig : ℝ) (hsig : 1 < sig) : L sig = I₁ sig + I₂ sig := by
+    sorry
+
+  have step2 : Filter.Tendsto L (nhdsWithin 1 (Set.Ioi 1)) (nhds ((1 / (2 * π)) * ∑' (n : ℕ+), a n * (x / n) * 𝓕 φ ((T / (2 * π)) * log (n / x)))) := by
+    sorry
+
+  have step3 : Filter.Tendsto I₁ (nhdsWithin 1 (Set.Ioi 1)) (nhds ((1 / (2 * π * T)) * (∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I)))) := by
+    sorry
+
+  have step4 : Filter.Tendsto I₂ (nhdsWithin 1 (Set.Ioi 1)) (nhds ((x / (2 * π * T) : ℝ) * ∫ u in Set.Ici (-log x), 𝓕 (fun t : ℝ ↦ φ (t / T)) (u / (2 * π)))) := by
+    sorry
+
+  have step4b : (x / (2 * π * T) : ℝ) * ∫ u in Set.Ici (-log x), 𝓕 (fun t : ℝ ↦ φ (t / T)) (u / (2 * π)) = (x / T : ℂ) * ∫ y in Set.Ici (-T * log x / (2 * π)), 𝓕 φ y := by
+    sorry
+
+  have step5 : ∫ y, 𝓕 φ y = φ 0 := by
+    sorry
+
+  have step6 : ∫ y, 𝓕 φ y = (∫ y in Set.Iic (-T * log x / (2 * π)), 𝓕 φ y) + ∫ y in Set.Ici (-T * log x / (2 * π)), 𝓕 φ y := by
+    sorry
+
+  have step7 : Filter.Tendsto (fun sig ↦ I₁ sig + I₂ sig) (nhdsWithin 1 (Set.Ioi 1))
+      (nhds ((1 / (2 * π * T)) * (∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I)) +
+          (x / T : ℂ) * ∫ y in Set.Ici (-T * log x / (2 * π)), 𝓕 φ y)) := by
+    sorry
+
+  have step8 : (1 / (2 * π)) * ∑' (n : ℕ+), a n * (x / n) * 𝓕 φ ((T / (2 * π)) * log (n / x)) =
+      (1 / (2 * π * T)) * (∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I)) +
+      (x / T : ℂ) * ∫ y in Set.Ici (-T * log x / (2 * π)), 𝓕 φ y := by
+    sorry
+
+
+  have h_int : ∫ y in Set.Ici (-T * log x / (2 * π)), 𝓕 φ y =
+      φ 0 - ∫ y in Set.Iic (-T * log x / (2 * π)), 𝓕 φ y := by
+    rw [← step5, step6]
+    ring
+
+  rw [step8, h_int]
+  calc
+    (1 / (2 * π * T)) * (∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I)) +
+      (x / T : ℂ) * (φ 0 - ∫ y in Set.Iic (-T * log x / (2 * π)), 𝓕 φ y) =
+    (1 / (2 * π * T)) * (∫ t in Set.Icc (-T) T, φ (t/T) * G (1 + t * I) * x ^ (1 + t * I)) +
+      (φ 0 - ∫ y in Set.Iic (-T * log x / (2 * π)), 𝓕 φ y) * (x / T) := by ring
+
 
 @[blueprint
   "ch2-S-def"
