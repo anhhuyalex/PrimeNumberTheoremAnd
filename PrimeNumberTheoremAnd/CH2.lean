@@ -409,6 +409,37 @@ In this section we construct extremal approximants to the truncated exponential 
 
 noncomputable def coth (z : ℂ) : ℂ := 1 / tanh z
 
+lemma coth_add_pi_mul_I (z : ℂ) : coth (z + π * I) = coth z := by
+  by_cases h : tanh (z + π * I) = 0
+  · have h' : tanh z = 0 := by
+      rw [Complex.tanh_eq_sinh_div_cosh, div_eq_zero_iff] at h ⊢
+      have hexp : exp (π * I) = -1 := exp_pi_mul_I
+      have hexp_neg : exp (-(π * I)) = -1 := by
+        rw [Complex.exp_neg, hexp, inv_neg, inv_one]
+      have hsinh : Complex.sinh (z + π * I) = -Complex.sinh z := by
+        rw [Complex.sinh, Complex.sinh, Complex.exp_add, neg_add, Complex.exp_add, hexp, hexp_neg]
+        ring
+      have hcosh : Complex.cosh (z + π * I) = -Complex.cosh z := by
+        rw [Complex.cosh, Complex.cosh, Complex.exp_add, neg_add, Complex.exp_add, hexp, hexp_neg]
+        ring
+      simpa [hsinh, hcosh] using h
+    rw [coth, coth, h, h']
+  · have h' : tanh (z + π * I) = tanh z := by
+      rw [Complex.tanh_eq_sinh_div_cosh, Complex.tanh_eq_sinh_div_cosh]
+      have hexp : exp (π * I) = -1 := exp_pi_mul_I
+      have hexp_neg : exp (-(π * I)) = -1 := by
+        rw [Complex.exp_neg, hexp, inv_neg, inv_one]
+      have hsinh : Complex.sinh (z + π * I) = -Complex.sinh z := by
+        rw [Complex.sinh, Complex.sinh, Complex.exp_add, neg_add, Complex.exp_add, hexp, hexp_neg]
+        ring
+      have hcosh : Complex.cosh (z + π * I) = -Complex.cosh z := by
+        rw [Complex.cosh, Complex.cosh, Complex.exp_add, neg_add, Complex.exp_add, hexp, hexp_neg]
+        ring
+      rw [hsinh, hcosh]
+      field_simp
+    rw [coth, coth, h']
+
+
 @[blueprint
   "Phi-circ-def"
   (title := "Definition of $\\Phi^{\\pm,\\circ}_\\nu$")
@@ -2089,10 +2120,9 @@ lemma horizontal_integral_phi_fourier_vanish (ν ε x a b : ℝ) (hν : ν > 0) 
   "shift-upwards"
   (title := "Contour shifting upwards")
   (statement := /-- If $x < 0$, then
-\begin{multline}\label{eq:1.5}
-\widehat{\varphi^{\pm}_{\nu}}(x) = \int_{-1+i\infty}^{-1} \bigl(\Phi^{\pm,\circ}_{\nu}(z) - \Phi^{\pm,\star}_{\nu}(z)\bigr) e(-zx)\, dz \\
-+ \int_{1}^{1+i\infty} \bigl(\Phi^{\pm,\circ}_{\nu}(z) + \Phi^{\pm,\star}_{\nu}(z)\bigr) e(-zx)\, dz + 2\int_0^{i\infty} \Phi^{\pm,\star}_{\nu}(z)\, e(-zx)\, dz.
-\end{multline}
+\begin{equation}\label{eq:1.5}
+\widehat{\varphi^{\pm}_{\nu}}(x) = \int_{-1+i\infty}^{-1} \bigl(\Phi^{\pm,\circ}_{\nu}(z) - \Phi^{\pm,\star}_{\nu}(z)\bigr) e(-zx)\, dz + \int_{1}^{1+i\infty} \bigl(\Phi^{\pm,\circ}_{\nu}(z) + \Phi^{\pm,\star}_{\nu}(z)\bigr) e(-zx)\, dz + 2\int_0^{i\infty} \Phi^{\pm,\star}_{\nu}(z)\, e(-zx)\, dz.
+\end{equation}
   -/)
   (proof := /-- Since $\Phi^{\pm,\circ}_{\nu}(z) \pm \Phi^{\pm,\star}_{\nu}(z)$ has no poles in the upper half plane, we can shift contours upwards, as we may: for $\Im z \to \infty$, $e(-zx) = e^{-2\pi i z x}$ decays exponentially on $\Im z$, while, by Lemma~1.3, $\Phi^{\pm,\circ}_{\nu}(z) \pm \Phi^{\pm,\star}_{\nu}(z)$ grows at most linearly, and so the contribution of a moving horizontal segment goes to $0$ as $\Im z \to \infty$. -/)
   (latexEnv := "sublemma")
@@ -2310,9 +2340,196 @@ $$
   -/)
   (latexEnv := "sublemma")
   (discussion := 1083)]
-theorem shift_upwards_simplified (ν ε : ℝ) (hlam : ν ≠ 0) (x : ℝ) (hx : x < 0) :
+theorem shift_upwards_simplified (ν ε : ℝ) (hν : ν > 0) (x : ℝ) (hx : x < 0) :
     Filter.atTop.Tendsto (fun T:ℝ ↦ (Real.sin (π * x))^2 / π^2 * ∫ t in Set.Icc 0 T, ((B ε (ν + t) - B ε ν) * Real.exp (x * t))) (nhds (𝓕 (ϕ_pm ν ε) x)) := by
+  have hlam : ν ≠ 0 := ne_of_gt hν
+  -- ----------------------------------------------------------------
+  -- Step 1.  Phi_circ is 1-periodic.
+  -- Proof sketch: w(z - 1) = w(z) + 2πi, and coth has period πi,
+  -- so coth(w(z-1)/2) = coth(w(z)/2 + πi) = coth(w(z)/2).
+  -- ----------------------------------------------------------------
+  have h_circ_periodic (z : ℂ) : Phi_circ ν ε (z - 1) = Phi_circ ν ε z := by
+    simp only [Phi_circ]
+    congr 1
+    have : (-2 * ↑π * I * (z - 1) + ↑ν) / 2 = (-2 * ↑π * I * z + ↑ν) / 2 + ↑π * I := by ring
+    rw [this]
+    rw [coth_add_pi_mul_I]
+  -- ----------------------------------------------------------------
+  -- Step 2.  On shifted imaginary rays, Phi_circ ± Phi_star reduces
+  -- to ∓ Phi_star on the pure imaginary ray, via phi_star_affine_periodic.
+  --
+  -- For h_sub: z = I*t, m = 1 gives Phi_star(I*t - 1) = Phi_star(I*t) + Phi_circ(I*t).
+  -- Combined with h_circ_periodic: Phi_circ(-1+I*t) - Phi_star(-1+I*t) = -Phi_star(I*t).
+  --
+  -- For h_add: z = I*t, m = -1 gives Phi_star(I*t + 1) = Phi_star(I*t) - Phi_circ(I*t).
+  -- Combined with h_circ_periodic: Phi_circ(1+I*t) + Phi_star(1+I*t) = Phi_star(I*t).
+  -- ----------------------------------------------------------------
+  have h_sub (t : ℝ) :
+      Phi_circ ν ε (-1 + I * t) - Phi_star ν ε (-1 + I * t) = -Phi_star ν ε (I * t) := by
+    have hz : (-1 : ℂ) + I * t = I * t - 1 := by ring
+    rw [hz, ← h_circ_periodic (I * t)]
+    have haff := phi_star_affine_periodic ν ε hν (I * t) 1
+      (by push_cast; ring_nf; simp; positivity)
+      (by push_cast; ring_nf; simp; constructor
+          · intro h; have := congr_arg Complex.re h; simp [Real.pi_pos.le] at this; linarith
+          · exact fun _ => by simp)
+    simp at haff
+    linarith [haff]
     sorry
+  have h_add (t : ℝ) :
+      Phi_circ ν ε (1 + I * t) + Phi_star ν ε (1 + I * t) = Phi_star ν ε (I * t) := by
+    have hz : (1 : ℂ) + I * t = I * t - (-1) := by push_cast; ring
+    rw [hz, ← h_circ_periodic (I * t)]
+    have haff := phi_star_affine_periodic ν ε hν (I * t) (-1)
+      (by push_cast; ring_nf; simp; positivity)
+      (by push_cast; ring_nf; simp; constructor
+          · intro h; have := congr_arg Complex.re h; simp [Real.pi_pos.le] at this; linarith
+          · exact fun _ => by simp)
+    simp at haff
+    linarith [haff]
+    sorry
+  -- ----------------------------------------------------------------
+  -- Step 3.  The three-integral from shift_upwards factors.
+  -- Rewrite using h_sub and h_add, then use E(-(-1+It)x) = E(x)*E(-Itx)
+  -- and E(-(1+It)x) = E(-x)*E(-Itx), so the three integrals combine to
+  --   (2 - E(x) - E(-x)) * (I * ∫₀ᵀ Phi_star(It) * E(-Itx) dt).
+  -- ----------------------------------------------------------------
+  have h_factor (T : ℝ) :
+      (I * ∫ t in Set.Icc 0 T,
+          (Phi_circ ν ε (-1 + I * t) - Phi_star ν ε (-1 + I * t)) * E (-(-1 + I * t) * x))
+      - (I * ∫ t in Set.Icc 0 T,
+          (Phi_circ ν ε (1 + I * t) + Phi_star ν ε (1 + I * t)) * E (-(1 + I * t) * x))
+      + (2 * I * ∫ t in Set.Icc 0 T, Phi_star ν ε (I * t) * E (-(I * t) * x))
+      = (2 - E x - E (-x)) * (I * ∫ t in Set.Icc 0 T, Phi_star ν ε (I * t) * E (-(I * t) * x)) := by
+    -- Rewrite each integrand using h_sub, h_add, and E(-(-1+It)x) = E(x)*E(-Itx)
+    have hE_shift_neg (t : ℝ) : E (-(-1 + I * ↑t) * ↑x) = E ↑x * E (-(I * ↑t) * ↑x) := by
+      simp only [E, ← Complex.exp_add]; congr 1; ring
+    have hE_shift_pos (t : ℝ) : E (-(1 + I * ↑t) * ↑x) = E (-↑x) * E (-(I * ↑t) * ↑x) := by
+      simp only [E, ← Complex.exp_add]; congr 1; ring
+    simp_rw [h_sub, h_add, hE_shift_neg, hE_shift_pos, neg_mul, ← integral_neg,
+      ← integral_mul_left, ← integral_mul_right]
+    ring
+  -- ----------------------------------------------------------------
+  -- Step 4.  The prefactor 2 - E(x) - E(-x) = 4 * sin²(π*x).
+  -- Proof: 2 - e^{2πix} - e^{-2πix} = 2(1 - cos(2πx)) = 4sin²(πx).
+  -- ----------------------------------------------------------------
+  have h_prefactor : (2 : ℂ) - E ↑x - E (-↑x) = 4 * (Real.sin (π * x)) ^ 2 := by
+    simp only [E, neg_mul, ← Complex.exp_neg]
+    rw [show (2 : ℂ) - Complex.exp (2 * ↑π * I * ↑x) - Complex.exp (-(2 * ↑π * I * ↑x)) =
+        4 * (Real.sin (π * x)) ^ 2 from by sorry]
+  -- ----------------------------------------------------------------
+  -- Step 5.  Phi_star on the imaginary axis: w(I*t) = 2π*t + ν (real).
+  -- Phi_star ν ε (I*t) = (B ε ↑(2π*t + ν) - B ε ↑ν) / (2π*I).
+  -- ----------------------------------------------------------------
+  have h_Phi_star_imag (t : ℝ) :
+      Phi_star ν ε (I * ↑t) = (B ε ↑(2 * π * t + ν) - B ε ↑ν) / (2 * ↑π * I) := by
+    simp only [Phi_star]
+    congr 1
+    -- -2*π*I*(I*t) + ν = 2π*t + ν (as real embedded in ℂ)
+    push_cast; ring_nf; simp
+  -- ----------------------------------------------------------------
+  -- Step 6.  E(-(I*t)*x) = exp(2π*x*t) as a real exponential.
+  -- E(-(I*t)*x) = e^{2πi * (-(I*t)*x)} = e^{2π*t*x}.
+  -- ----------------------------------------------------------------
+  have h_E_imag (t : ℝ) : E (-(I * ↑t) * ↑x) = ↑(Real.exp (2 * π * x * t)) := by
+    simp only [E]
+    rw [show 2 * ↑π * I * (-(I * ↑t) * ↑x) = 2 * ↑π * ↑x * ↑t by push_cast; ring]
+    rw [← Complex.ofReal_exp, Complex.ofReal_mul, Complex.ofReal_mul, Complex.ofReal_real]
+    sorry
+  -- ----------------------------------------------------------------
+  -- Step 7.  The imaginary-axis integral (times I) equals
+  --   (1/(2π)) * ∫₀ᵀ (B(ν+2πt) - B(ν)) * exp(2πxt) dt.
+  -- I * (stuff / (2πi)) = stuff / (2π).
+  -- ----------------------------------------------------------------
+  have h_imag_integral (T : ℝ) :
+      I * ∫ t in Set.Icc 0 T, Phi_star ν ε (I * ↑t) * E (-(I * ↑t) * ↑x)
+      = (1 / (2 * ↑π)) *
+        ∫ t in Set.Icc 0 T,
+          (B ε ↑(2 * π * t + ν) - B ε ↑ν) * ↑(Real.exp (2 * π * x * t)) := by
+    simp_rw [h_Phi_star_imag, h_E_imag]
+    set f : ℝ → ℂ := fun t ↦ (B ε ↑(2 * π * t + ν) - B ε ↑ν) * ↑(rexp (2 * π * x * t))
+    have hint : Integrable f (volume.restrict (Set.Icc 0 T)) := by
+      -- Step 1: Reduce integrability on a compact set to continuity.
+      apply ContinuousOn.integrableOn_compact isCompact_Icc
+      -- Step 2: Show that f is continuous on [0, T] as a product of two factors.
+      apply ContinuousOn.mul
+      · -- Factor 1: t ↦ B ε ↑(2 * π * t + ν) - B ε ↑ν is continuous.
+        apply ContinuousOn.sub _ continuousOn_const
+        apply continuousOn_of_forall_continuousAt; intro t ht
+        -- Argument 2πt + ν is positive for all t ≥ 0 given ν > 0.
+        have hpos : 0 < 2 * π * t + ν := by nlinarith [Real.pi_pos, ht.1, hν]
+        -- B is continuous at positive real arguments (lemma B.continuousAt_ofReal_pos).
+        exact (B.continuousAt_ofReal_pos ε _ hpos).comp_of_eq (by fun_prop) (by push_cast; ring)
+      · -- Factor 2: t ↦ ↑(rexp (2 * π * x * t)) is continuous.
+        apply ContinuousOn.comp Complex.continuous_ofReal.continuousOn
+        · exact (Real.continuous_exp.comp (by fun_prop)).continuousOn
+        · exact Set.mapsTo_univ _ _
+
+    rw [← integral_const_mul I]
+    have : ((1 : ℂ) / (2 * ↑π)) * ∫ t in Set.Icc 0 T, f t = ∫ t in Set.Icc 0 T, ((1 : ℂ) / (2 * ↑π)) * f t := by
+      rw [integral_const_mul]
+    rw [this]
+    congr 1; ext t
+    field_simp [Complex.I_ne_zero, Real.pi_pos.ne.symm]
+    unfold f; ring
+
+  -- ----------------------------------------------------------------
+  -- Step 8.  Change of variables s = 2π*t in the integral:
+  --   ∫₀ᵀ f(2πt) * exp(2πxt) dt = (1/(2π)) * ∫₀^{2πT} f(s) * exp(xs) ds.
+  -- Use MeasureTheory.integral_comp_mul_right (or similar).
+  -- ----------------------------------------------------------------
+  have h_cov (T : ℝ) (hT : 0 ≤ T) :
+      ∫ t in Set.Icc 0 T,
+          (B ε ↑(2 * π * t + ν) - B ε ↑ν) * ↑(Real.exp (2 * π * x * t))
+      = (1 / (2 * π)) *
+    ∫ s in Set.Icc 0 (2 * π * T),
+          (B ε (ν + s) - B ε ν) * Real.exp (x * s) := by
+    -- Substitution s = 2π*t: ds = 2π dt, exp(2πxt) = exp(xs), B(2πt+ν) = B(ν+s)
+    rw [MeasureTheory.integral_Icc_eq_integral_Ioc, ← intervalIntegral.integral_of_le hT]
+    rw [MeasureTheory.integral_Icc_eq_integral_Ioc, ← intervalIntegral.integral_of_le (by positivity)]
+    let f : ℝ → ℂ := fun s ↦ (B ε (s + ν) - B ε ν) * (Real.exp (x * s) : ℂ)
+    have h_scale := intervalIntegral.integral_comp_mul_left f (c := 2 * π) (by positivity) (a := 0) (b := T)
+    dsimp [f] at h_scale
+    convert h_scale using 1
+    · push_cast; congr 1; ext t; ring_nf
+    · push_cast; field_simp; congr 1
+      · ext s; ring_nf
+      · simp
+  -- ----------------------------------------------------------------
+  -- Step 9.  Combine Steps 3–8: the three-integral at T/(2π) equals
+  --   sin²(πx)/π² * ∫₀ᵀ (B(ν+s)-B(ν)) * exp(xs) ds.
+  -- ----------------------------------------------------------------
+  have h_key (T : ℝ) (hT : 0 ≤ T) :
+      (I * ∫ t in Set.Icc 0 (T / (2 * π)),
+          (Phi_circ ν ε (-1 + I * t) - Phi_star ν ε (-1 + I * t)) * E (-(-1 + I * t) * x))
+      - (I * ∫ t in Set.Icc 0 (T / (2 * π)),
+          (Phi_circ ν ε (1 + I * t) + Phi_star ν ε (1 + I * t)) * E (-(1 + I * t) * x))
+      + (2 * I * ∫ t in Set.Icc 0 (T / (2 * π)),
+          Phi_star ν ε (I * t) * E (-(I * t) * x))
+      = ↑(Real.sin (π * x)) ^ 2 / ↑π ^ 2 *
+        ∫ t in Set.Icc 0 T, (B ε (ν + t) - B ε ν) * Real.exp (x * t) := by
+    rw [h_factor, h_imag_integral, h_prefactor, h_cov (T / (2 * π)) (by positivity)]
+    -- Now: 4sin²(πx) * (1/(2π)) * (1/(2π)) * ∫₀ᵀ = sin²(πx)/π² * ∫₀ᵀ
+    -- since 2π * (T/(2π)) = T
+    have h2pi : 2 * π * (T / (2 * π)) = T := by field_simp
+    rw [h2pi]
+    push_cast; ring_nf
+    congr; ext t; ring_nf
+  -- ----------------------------------------------------------------
+  -- Step 10.  Conclude: compose shift_upwards (at scale T/(2π)) with
+  --   the filter fact that T ↦ T/(2π) sends atTop to atTop,
+  --   then rewrite using h_key.
+  -- ----------------------------------------------------------------
+  have h_scale : Filter.Tendsto (fun T : ℝ ↦ T / (2 * π)) Filter.atTop Filter.atTop :=
+    Filter.tendsto_atTop_atTop_of_monotone
+      (fun _ _ hab => div_le_div_of_nonneg_right hab (by positivity))
+      (fun b => ⟨b * (2 * π), by simp⟩)
+  -- shift_upwards gives the three-integral limit; compose with T ↦ T/(2π)
+  have h_shifted := (shift_upwards ν ε hν x hx).comp h_scale
+  -- h_shifted : Tendsto (fun T ↦ three-integral(T/(2π))) atTop (nhds (𝓕 (ϕ_pm ν ε) x))
+  apply h_shifted.congr'
+  filter_upwards [Filter.eventually_ge_atTop 0] with T hT
+  exact h_key T hT
 
 @[blueprint
   "shift-downwards"
