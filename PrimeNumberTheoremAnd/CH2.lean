@@ -1412,6 +1412,23 @@ theorem ϕ_c2_right (ν ε : ℝ) (hlam : ν ≠ 0) : ContDiffOn ℝ 2 (ϕ_pm ν
     · simp [Real.sign_zero, Phi_star_zero]
     · simp [Real.sign_of_pos hpos]
 
+lemma varphi_differentiableAt_left (ν ε : ℝ) (hlam : ν ≠ 0) {x : ℝ} (hx : x ∈ Set.Ioo (-1 : ℝ) 0) :
+    DifferentiableAt ℝ (ϕ_pm ν ε) x :=
+  (ϕ_c2_left ν ε hlam).differentiableOn (by norm_num) x (Set.Ioo_subset_Icc_self hx)
+    |>.differentiableAt (Icc_mem_nhds hx.1 hx.2)
+
+lemma varphi_differentiableAt_right (ν ε : ℝ) (hlam : ν ≠ 0) {x : ℝ} (hx : x ∈ Set.Ioo (0 : ℝ) 1) :
+    DifferentiableAt ℝ (ϕ_pm ν ε) x :=
+  (ϕ_c2_right ν ε hlam).differentiableOn (by norm_num) x (Set.Ioo_subset_Icc_self hx)
+    |>.differentiableAt (Icc_mem_nhds hx.1 hx.2)
+
+lemma varphi_differentiableAt_out (ν ε : ℝ) {x : ℝ} (hx : x ∈ (Set.Icc (-1 : ℝ) 1)ᶜ) :
+    DifferentiableAt ℝ (ϕ_pm ν ε) x := by
+  have h_zero : ϕ_pm ν ε =ᶠ[nhds x] 0 := by
+    filter_upwards [isClosed_Icc.isOpen_compl.mem_nhds hx] with y hy
+    unfold ϕ_pm; exact if_neg hy
+  exact Filter.EventuallyEq.differentiableAt_iff h_zero |>.mpr (differentiableAt_const 0)
+
 @[blueprint
   "phi-cts"
   (title := "$\\varphi$ is continuous")
@@ -1486,6 +1503,83 @@ theorem ϕ_continuous (ν ε : ℝ) (hlam : ν ≠ 0) : Continuous (ϕ_pm ν ε)
           rwa [← mem_closure_iff_nhdsWithin_neBot, closure_Icc]
         rw [Filter.not_neBot] at this; simp [ContinuousWithinAt, this]
   · exact continuousOn_const
+
+theorem ϕ_pm_zero_boundary (ν ε : ℝ) (hlam : ν ≠ 0) : ϕ_pm ν ε (-1) = 0 ∧ ϕ_pm ν ε 1 = 0 := by
+  constructor
+  · -- Prove for -1 using continuity and the zero-value for t < -1
+    have h_eq : ϕ_pm ν ε =ᶠ[nhdsWithin (-1) (Set.Iio (-1))] 0 := by
+      filter_upwards [self_mem_nhdsWithin] with z hz
+      unfold ϕ_pm; split_ifs with hz_mem <;> try rfl
+      exfalso; linarith [Set.mem_Iio.mp hz]
+    exact tendsto_nhds_unique
+      (tendsto_nhdsWithin_of_tendsto_nhds (ϕ_continuous ν ε hlam).continuousAt)
+      (tendsto_const_nhds.congr' h_eq.symm)
+  · -- Prove for 1 using continuity and the zero-value for t > 1
+    have h_eq : ϕ_pm ν ε =ᶠ[nhdsWithin 1 (Set.Ioi 1)] 0 := by
+      filter_upwards [self_mem_nhdsWithin] with z hz
+      unfold ϕ_pm; split_ifs with hz_mem <;> try rfl
+      exfalso; linarith [Set.mem_Ioi.mp hz]
+    exact tendsto_nhds_unique
+      (tendsto_nhdsWithin_of_tendsto_nhds (ϕ_continuous ν ε hlam).continuousAt)
+      (tendsto_const_nhds.congr' h_eq.symm)
+
+
+
+
+-- differentiable varphi
+theorem ϕ_differentiable (ν ε : ℝ) (hlam : ν ≠ 0) : Differentiable ℝ (ϕ_pm ν ε) := by
+  intro x
+  by_cases h_left : x ∈ Set.Ioo (-1 : ℝ) 0
+  · exact varphi_differentiableAt_left ν ε hlam h_left
+  by_cases h_right : x ∈ Set.Ioo (0 : ℝ) 1
+  · exact varphi_differentiableAt_right ν ε hlam h_right
+  by_cases h_out : x ∈ (Set.Icc (-1 : ℝ) 1)ᶜ
+  · exact varphi_differentiableAt_out ν ε h_out
+  -- Remaining points: {-1, 0, 1}
+  -- At these points, the function matches smoothly (C¹) between the components.
+  -- Remaining points: {-1, 0, 1}
+  have h_in : x ∈ Set.Icc (-1 : ℝ) 1 := Set.notMem_compl_iff.mp h_out
+  obtain rfl | rfl | rfl : x = -1 ∨ x = 0 ∨ x = 1 := by
+    simp only [Set.Icc, Set.mem_setOf_eq, Set.Ioo, not_and, not_lt] at h_in h_left h_right
+    rcases h_in with ⟨h1, h2⟩
+    by_cases hx : x = -1; · left; exact hx
+    by_cases hx' : x = 0; · right; left; exact hx'
+    by_cases hx'' : x = 1; · right; right; exact hx''
+    exfalso
+    if h_neg : x < 0 then
+      have : 0 ≤ x := h_left (lt_of_le_of_ne h1 (Ne.symm hx))
+      exact absurd h_neg (not_lt.mpr this)
+    else
+      have : 1 ≤ x := h_right (lt_of_le_of_ne (not_lt.mp h_neg) (Ne.symm hx'))
+      exact absurd (lt_of_le_of_ne this (Ne.symm hx'')) (not_lt.mpr h2)
+  · -- Case x = -1: Glueing 0 and left-interval C²
+    -- Step 1: Establish that the function value is zero at the boundary point -1.
+    -- This follows from the continuity proven in `ϕ_continuous` and the fact that it is 0 outside [-1, 1].
+    have h_val : ϕ_pm ν ε (-1) = 0 := (ϕ_pm_zero_boundary ν ε hlam).1
+
+    -- Step 2: Show the left-derivative at -1 is 0.
+    -- Since ϕ_pm is identically 0 on the interval (-∞, -1], its derivative from the left is 0.
+    -- We can use `HasDerivWithinAt.congr_nhdsWithin` with the fact that ϕ_pm is 0 on Iic (-1).
+    have h_left : HasDerivWithinAt (ϕ_pm ν ε) 0 (Set.Iic (-1)) (-1) := sorry
+
+    -- Step 3: Show the right-derivative at -1 is 0.
+    -- From `ϕ_c2_left`, ϕ_pm is C² on [-1, 0]. The right-derivative at -1 is given by
+    -- the derivative of (Phi_circ - Phi_star). At t = -1, w = ν + 2πi.
+    -- Due to the πi-periodicity of `coth`, the derivatives of Phi_circ and Phi_star
+    -- cancel exactly at this point.
+    have h_right : HasDerivWithinAt (ϕ_pm ν ε) 0 (Set.Icc (-1) 0) (-1) := sorry
+
+    -- Step 4: Glue the two one-sided derivatives.
+    have h_union : HasDerivWithinAt (ϕ_pm ν ε) 0 (Set.Iic 0) (-1) := by
+      -- Use EventuallyEq.of_eq to convert a global set equality to a filter equality.
+      refine (h_left.union h_right).congr_set (Filter.EventuallyEq.of_eq ?_)
+      ext t
+      simp
+    exact h_union.hasDerivAt (Iic_mem_nhds (by norm_num)) |>.differentiableAt
+  · -- Case x = 0: Glueing left and right C²
+    sorry
+  · -- Case x = 1: Glueing right-interval C² and 0
+    sorry
 
 @[blueprint
   "phi-circ-bound-right"
@@ -3869,7 +3963,9 @@ theorem fourier_real (ν ε : ℝ) (hlam : ν ≠ 0) (x : ℝ) : (𝓕 (ϕ_pm ν
   (latexEnv := "lemma")
   (discussion := 1227)]
 theorem varphi_integ (ν ε : ℝ) (hlam : ν ≠ 0) : Integrable (ϕ_pm ν ε) := by
-    sorry
+  rw [← integrableOn_univ, ← Set.union_compl_self (Set.Icc (-1 : ℝ) 1)]
+  refine IntegrableOn.union ((ϕ_continuous ν ε hlam).continuousOn.integrableOn_compact isCompact_Icc) ?_
+  exact (integrable_zero ℝ ℂ volume).integrableOn.congr_fun (fun t ht ↦ (if_neg ht).symm) measurableSet_Icc.compl
 
 @[blueprint
   "Inu_def"
@@ -4015,17 +4111,6 @@ theorem Inu_bounds (ν x : ℝ) (hν : ν > 0) :
   · exact Inu_bounds_zero ν hν
   · exact Inu_bounds_pos ν x hν hx
 
-@[blueprint
-  "varphi-abs"
-  (title := "$\\varphi$ absolutely continuous")
-  (statement := /-- The function $\varphi_\nu^\pm$ is absolutely continuous. -/)
-  (proof := /-- Apply Lemmas \ref{phi-c2-left}, \ref{phi-c2-right}, \ref{phi-cts} We know $\varphi_\nu^\pm$ is absolutely continuous because it is $C^1$ on $[-1, 0]$ and $[0, 1]$, and identically $0$ outside $[-1, 1]$./
--/)
-  (latexEnv := "lemma")
-  (discussion := 1226)]
-theorem varphi_abs (ν ε : ℝ) (hlam : ν ≠ 0) : AbsolutelyContinuous (ϕ_pm ν ε) := by
-    sorry
-
 
 @[blueprint
   "varphi-deriv-integ"
@@ -4036,7 +4121,413 @@ theorem varphi_abs (ν ε : ℝ) (hlam : ν ≠ 0) : AbsolutelyContinuous (ϕ_pm
   (latexEnv := "lemma")
   (discussion := 1228)]
 theorem varphi_deriv_integ (ν ε : ℝ) (hlam : ν ≠ 0) : Integrable (deriv (ϕ_pm ν ε)) := by
-    sorry
+  rw [← integrableOn_univ, ← Set.union_compl_self (Set.Icc (-1 : ℝ) 1)]
+  refine IntegrableOn.union ?_ ?_
+  · have h_Icc : (Set.Icc (-1 : ℝ) 1) = Set.Icc (-1) 0 ∪ Set.Icc 0 1 :=
+      (Set.Icc_union_Icc_eq_Icc (by norm_num : (-1:ℝ) ≤ 0) (by norm_num : (0:ℝ) ≤ 1)).symm
+    rw [h_Icc]
+    refine IntegrableOn.union ?_ ?_
+    · have h_cont : ContinuousOn (derivWithin (ϕ_pm ν ε) (Set.Icc (-1) 0)) (Set.Icc (-1) 0) :=
+        (ϕ_c2_left ν ε hlam).continuousOn_derivWithin (uniqueDiffOn_Icc (by norm_num)) (by norm_num)
+      have h_int_within : IntegrableOn (derivWithin (ϕ_pm ν ε) (Set.Icc (-1) 0)) (Set.Icc (-1) 0) :=
+        h_cont.integrableOn_compact isCompact_Icc
+      rw [integrableOn_Icc_iff_integrableOn_Ioo] at h_int_within ⊢
+      refine IntegrableOn.congr_fun h_int_within ?_ measurableSet_Ioo
+      intro x hx
+      have h1 : derivWithin (ϕ_pm ν ε) (Set.Ioo (-1) 0) x = deriv (ϕ_pm ν ε) x :=
+        derivWithin_of_isOpen isOpen_Ioo hx
+      have h2 : derivWithin (ϕ_pm ν ε) (Set.Ioo (-1) 0) x = derivWithin (ϕ_pm ν ε) (Set.Icc (-1) 0) x :=
+        derivWithin_subset Set.Ioo_subset_Icc_self (isOpen_Ioo.uniqueDiffWithinAt hx)
+          ((ϕ_c2_left ν ε hlam).differentiableOn (by norm_num) x (Set.Ioo_subset_Icc_self hx))
+      rw [← h2, h1]
+    · have h_cont : ContinuousOn (derivWithin (ϕ_pm ν ε) (Set.Icc 0 1)) (Set.Icc 0 1) :=
+        (ϕ_c2_right ν ε hlam).continuousOn_derivWithin (uniqueDiffOn_Icc (by norm_num)) (by norm_num)
+      have h_int_within : IntegrableOn (derivWithin (ϕ_pm ν ε) (Set.Icc 0 1)) (Set.Icc 0 1) :=
+        h_cont.integrableOn_compact isCompact_Icc
+      rw [integrableOn_Icc_iff_integrableOn_Ioo] at h_int_within ⊢
+      refine IntegrableOn.congr_fun h_int_within ?_ measurableSet_Ioo
+      intro x hx
+      have h1 : derivWithin (ϕ_pm ν ε) (Set.Ioo 0 1) x = deriv (ϕ_pm ν ε) x :=
+        derivWithin_of_isOpen isOpen_Ioo hx
+      have h2 : derivWithin (ϕ_pm ν ε) (Set.Ioo 0 1) x = derivWithin (ϕ_pm ν ε) (Set.Icc 0 1) x :=
+        derivWithin_subset Set.Ioo_subset_Icc_self (isOpen_Ioo.uniqueDiffWithinAt hx)
+          ((ϕ_c2_right ν ε hlam).differentiableOn (by norm_num) x (Set.Ioo_subset_Icc_self hx))
+      rw [← h2, h1]
+  · exact (integrable_zero ℝ ℂ volume).integrableOn.congr_fun (by
+      intro t ht
+      have h_nhds : (Set.Icc (-1 : ℝ) 1)ᶜ ∈ nhds t := isClosed_Icc.isOpen_compl.mem_nhds ht
+      have h_eq : ϕ_pm ν ε =ᶠ[nhds t] (fun _ ↦ (0 : ℂ)) := by
+        filter_upwards [h_nhds] with x hx
+        unfold ϕ_pm
+        exact if_neg hx
+      rw [h_eq.deriv_eq, deriv_const]) measurableSet_Icc.compl
+
+lemma varphi_ftc_left (ν ε : ℝ) (hlam : ν ≠ 0) {x y : ℝ}
+    (hx : x ∈ Set.Icc (-1 : ℝ) 0) (hy : y ∈ Set.Icc (-1 : ℝ) 0) :
+    ∫ t in x..y, deriv (ϕ_pm ν ε) t = (ϕ_pm ν ε) y - (ϕ_pm ν ε) x := by
+  apply intervalIntegral.integral_deriv_eq_sub_uIoo
+  -- Subgoal 1: Continuity
+  · apply (ϕ_continuous ν ε hlam).continuousOn.mono
+    exact Set.uIcc_subset_Icc hx hy
+  -- Subgoal 2: Differentiability on uIoo
+  · intro t ht
+    have ht' : t ∈ Set.Ioo (-1 : ℝ) 0 := by
+      constructor
+      · linarith [hx.1, hy.1, ht.1, le_min hx.1 hy.1] -- ht.1 is min x y < t
+      · linarith [hx.2, hy.2, ht.2, max_le hx.2 hy.2] -- ht.2 is t < max x y
+    exact varphi_differentiableAt_left ν ε hlam ht'
+  -- Subgoal 3: Integrability
+  · exact (varphi_deriv_integ ν ε hlam).intervalIntegrable
+
+
+lemma varphi_ftc_right (ν ε : ℝ) (hlam : ν ≠ 0) {x y : ℝ}
+    (hx : x ∈ Set.Icc (0 : ℝ) 1) (hy : y ∈ Set.Icc (0 : ℝ) 1) :
+    ∫ t in x..y, deriv (ϕ_pm ν ε) t = (ϕ_pm ν ε) y - (ϕ_pm ν ε) x := by
+  apply intervalIntegral.integral_deriv_eq_sub_uIoo
+  -- Subgoal 1: Continuity
+  · apply (ϕ_continuous ν ε hlam).continuousOn.mono
+    exact Set.uIcc_subset_Icc hx hy
+  -- Subgoal 2: Differentiability on uIoo
+  · intro t ht
+    have ht' : t ∈ Set.Ioo 0 1 := by
+      constructor
+      · linarith [hx.1, hy.1, ht.1, le_min hx.1 hy.1]
+      · linarith [hx.2, hy.2, ht.2, max_le hx.2 hy.2]
+    exact varphi_differentiableAt_right ν ε hlam ht'
+  -- Subgoal 3: Integrability
+  · exact (varphi_deriv_integ ν ε hlam).intervalIntegrable
+
+lemma varphi_ftc_out (ν ε : ℝ) (hlam : ν ≠ 0) {x y : ℝ}
+    (h : (x ≤ -1 ∧ y ≤ -1) ∨ (x ≥ 1 ∧ y ≥ 1)) :
+    ∫ t in x..y, deriv (ϕ_pm ν ε) t = (ϕ_pm ν ε) y - (ϕ_pm ν ε) x := by
+  let f := ϕ_pm ν ε
+  change ∫ t in x..y, deriv f t = f y - f x
+  have hf_const {t : ℝ} (ht : t ≤ -1 ∨ t ≥ 1) : f t = 0 := by
+    unfold f ϕ_pm; split_ifs with h_mem
+    · rcases ht with h_le | h_ge
+      · have : t = -1 := by linarith [h_le, h_mem.1]
+        subst this
+        simpa [ϕ_pm] using (ϕ_pm_zero_boundary ν ε hlam).1
+      · have : t = 1 := by linarith [h_ge, h_mem.2]
+        subst this
+        simpa [ϕ_pm] using (ϕ_pm_zero_boundary ν ε hlam).2
+    · rfl
+  have hf_deriv (t : ℝ) (ht : t < -1 ∨ t > 1) : deriv f t = 0 := by
+    have h_eq : f =ᶠ[nhds t] 0 := by
+      have : t ∈ (Set.Icc (-1) 1)ᶜ := by
+        simp only [Set.mem_compl_iff, Set.mem_Icc, not_and, not_le]
+        intro; rcases ht with h | h <;> linarith
+      filter_upwards [isClosed_Icc.isOpen_compl.mem_nhds this] with z hz
+      unfold f ϕ_pm; exact if_neg hz
+    rw [h_eq.deriv_eq]
+    simp
+  rw [hf_const (h.elim (fun h' ↦ Or.inl h'.2) (fun h' ↦ Or.inr h'.2)),
+      hf_const (h.elim (fun h' ↦ Or.inl h'.1) (fun h' ↦ Or.inr h'.1)), sub_zero]
+  apply intervalIntegral.integral_zero_ae
+  -- Top-level case split on the hypothesis h
+  rcases h with ⟨hx, hy⟩ | ⟨hx, hy⟩
+
+  · -- ══ CASE 1: x ≤ -1, y ≤ -1 ══
+    -- The interval uIoc x y lies in (-∞, -1].
+    -- The only point where hf_deriv is silent is {-1}, which is Lebesgue-null.
+
+    -- A: Bound all points in the interval above by -1
+    have hmax : max x y ≤ -1 := max_le hx hy
+    have hbound : ∀ x_1 ∈ Set.uIoc x y, x_1 ≤ -1 := by
+      intro x_1 hx1
+      simp only [Set.uIoc, Set.mem_Ioc] at hx1
+      -- hx1 : min x y < x_1 ∧ x_1 ≤ max x y
+      -- Proof: x_1 ≤ max x y ≤ -1 by transitivity with hmax
+      exact le_trans hx1.2 hmax
+
+    -- B: Lebesgue-almost every real is ≠ -1, since {-1} is a null set
+    have hne_ae : ∀ᵐ (x_1 : ℝ), x_1 ≠ (-1 : ℝ) := by
+      rw [MeasureTheory.ae_iff]
+      -- Goal becomes: volume {x_1 | ¬(x_1 ≠ -1)} = 0
+      -- Proof: simplify the set to {-1}, then apply Real.volume_singleton
+      have hset : {x_1 : ℝ | ¬(x_1 ≠ -1)} = {-1} := by ext; simp
+      rw [hset]
+      -- ⚠️  Need: Real.volume_singleton : volume {a} = 0
+      -- (derivable from MeasureTheory.measure_singleton_eq_zero + NoAtoms instance for ℝ)
+      apply Real.volume_singleton
+
+    -- C: Combine A and B via filter_upwards
+    filter_upwards [hne_ae] with x_1 hne
+    intro hx1
+    -- hne : x_1 ≠ -1
+    -- hbound x_1 hx1 : x_1 ≤ -1
+    -- Together: x_1 < -1, so hf_deriv applies (left disjunct)
+    exact hf_deriv x_1 (Or.inl (lt_of_le_of_ne (hbound x_1 hx1) hne))
+
+  · -- ══ CASE 2: x ≥ 1, y ≥ 1 ══
+    -- uIoc x y = (min x y, max x y] ⊆ (1, ∞).
+    -- hf_deriv applies at EVERY point, so ∀ᵐ follows trivially from ∀.
+
+    have hmin : 1 ≤ min x y := le_min hx hy
+
+    -- Since the claim holds pointwise, ae is immediate
+    apply Filter.Eventually.of_forall
+    intro x_1 hx1
+    simp only [Set.uIoc, Set.mem_Ioc] at hx1
+    -- hx1 : min x y < x_1 ∧ x_1 ≤ max x y
+    apply hf_deriv
+    right
+    -- 1 ≤ min x y < x_1, so 1 < x_1 by transitivity
+    exact lt_of_le_of_lt hmin hx1.1
+
+
+@[blueprint
+  "varphi-abs"
+  (title := "$\\varphi$ absolutely continuous")
+  (statement := /-- The function $\varphi_\nu^\pm$ is absolutely continuous. -/)
+  (proof := /-- Apply Lemmas \ref{phi-c2-left}, \ref{phi-c2-right}, \ref{phi-cts} We know $\varphi_\nu^\pm$ is absolutely continuous because it is $C^1$ on $[-1, 0]$ and $[0, 1]$, and identically $0$ outside $[-1, 1]$./
+-/)
+  (latexEnv := "lemma")
+  (discussion := 1226)]
+theorem varphi_abs (ν ε : ℝ) (hlam : ν ≠ 0) : AbsolutelyContinuous (ϕ_pm ν ε) := by
+  constructor
+  · -- Prove differentiable almost everywhere
+    have h_diff_left : ∀ x ∈ Set.Ioo (-1 : ℝ) 0, DifferentiableAt ℝ (ϕ_pm ν ε) x :=
+      fun x hx => varphi_differentiableAt_left ν ε hlam hx
+    have h_diff_right : ∀ x ∈ Set.Ioo (0 : ℝ) 1, DifferentiableAt ℝ (ϕ_pm ν ε) x :=
+      fun x hx => varphi_differentiableAt_right ν ε hlam hx
+    have h_diff_out : ∀ x ∈ (Set.Icc (-1 : ℝ) 1)ᶜ, DifferentiableAt ℝ (ϕ_pm ν ε) x :=
+      fun x hx => varphi_differentiableAt_out ν ε hx
+    -- Step 1: Differentiable almost everywhere
+    rw [ae_iff]
+    apply MeasureTheory.measure_mono_null (t := {-1, 0, 1})
+    · -- Differentiability on the open intervals implies differentiability almost everywhere
+      intro x hx
+      contrapose! hx
+      simp only [Set.mem_insert_iff, Set.mem_singleton_iff, not_or, Set.mem_setOf_eq,
+        not_not] at hx ⊢
+      rcases lt_trichotomy x (-1) with h | rfl | h
+      · apply h_diff_out; simp only [Set.mem_compl_iff, Set.mem_Icc, not_and, not_le]; intro; linarith
+      · exfalso; exact hx.1 rfl
+      · rcases lt_trichotomy x 0 with h' | rfl | h'
+        · exact h_diff_left x ⟨h, h'⟩
+        · exfalso; exact hx.2.1 rfl
+        · rcases lt_trichotomy x 1 with h'' | rfl | h''
+          · exact h_diff_right x ⟨h', h''⟩
+          · exfalso; exact hx.2.2 rfl
+          · apply h_diff_out; simp only [Set.mem_compl_iff, Set.mem_Icc, not_and, not_le]; intro; linarith
+    · -- The measure of a finite set is zero
+      apply Set.Finite.measure_zero (by simp)
+  · -- Prove FTC for all a, b
+    intro a b
+    let f := ϕ_pm ν ε
+    have h_int : Integrable (deriv f) := varphi_deriv_integ ν ε hlam
+    have h_int_all (x y : ℝ) : IntervalIntegrable (deriv f) volume x y := h_int.intervalIntegrable
+    have h_ftc_left : ∀ x ∈ Set.Icc (-1 : ℝ) 0, ∀ y ∈ Set.Icc (-1 : ℝ) 0, ∫ t in x..y, deriv f t = f y - f x :=
+      fun x hx y hy => varphi_ftc_left ν ε hlam hx hy
+    have h_ftc_right : ∀ x ∈ Set.Icc (0 : ℝ) 1, ∀ y ∈ Set.Icc (0 : ℝ) 1, ∫ t in x..y, deriv f t = f y - f x :=
+      fun x hx y hy => varphi_ftc_right ν ε hlam hx hy
+    have h_ftc_out : ∀ x y : ℝ, (x ≤ -1 ∧ y ≤ -1) ∨ (x ≥ 1 ∧ y ≥ 1) → ∫ t in x..y, deriv f t = f y - f x :=
+      fun x y h => varphi_ftc_out ν ε hlam h
+    -- Final bridging and telescoping using ϕ_continuous
+    have h_AC (x y : ℝ) : ∫ t in x..y, deriv f t = f y - f x := by
+      wlog hxy : x ≤ y generalizing x y
+      · rw [intervalIntegral.integral_symm, this y x (by linarith)]; ring
+
+      rw [← intervalIntegral.integral_add_adjacent_intervals (h_int_all x (-1)) (h_int_all (-1) y),
+          ← intervalIntegral.integral_add_adjacent_intervals (h_int_all (-1) 0) (h_int_all 0 y),
+          ← intervalIntegral.integral_add_adjacent_intervals (h_int_all 0 1) (h_int_all 1 y)]
+
+      have h1 : ∫ t in (-1 : ℝ)..0, deriv f t = f 0 - f (-1) :=
+        h_ftc_left (-1) ⟨le_refl _, by norm_num⟩ 0 ⟨by norm_num, le_refl _⟩
+      have h2 : ∫ t in (0 : ℝ)..1, deriv f t = f 1 - f 0 :=
+        h_ftc_right 0 ⟨le_refl _, by norm_num⟩ 1 ⟨by norm_num, le_refl _⟩
+      rw [h1, h2]
+
+      have h_out_left (p : ℝ) : ∫ t in p..(-1), deriv f t = f (-1) - f p := by
+        rcases le_or_gt p (-1) with h_le | h_gt
+        · exact h_ftc_out p (-1) (Or.inl ⟨h_le, le_refl _⟩)
+        · rw [← intervalIntegral.integral_add_adjacent_intervals (h_int_all p 0) (h_int_all 0 (-1))]
+          rcases le_or_gt p 0 with hp0 | hp0
+          · rw [h_ftc_left p ⟨h_gt.le, hp0⟩ 0 ⟨by norm_num, le_refl _⟩,
+                h_ftc_left 0 ⟨by norm_num, le_refl _⟩ (-1) ⟨le_refl _, by norm_num⟩]
+            ring
+          · rw [← intervalIntegral.integral_add_adjacent_intervals (h_int_all p 1) (h_int_all 1 0)]
+            rcases le_or_gt p 1 with hp1 | hp1
+            · rw [h_ftc_right p ⟨hp0.le, hp1⟩ 1 ⟨by norm_num, le_refl _⟩,
+                  h_ftc_right 1 ⟨by norm_num, le_refl _⟩ 0 ⟨le_refl _, by norm_num⟩,
+                  h_ftc_left 0 ⟨by norm_num, le_refl _⟩ (-1) ⟨le_refl _, by norm_num⟩]
+              ring
+            · rw [h_ftc_out p 1 (Or.inr ⟨hp1.le, le_refl _⟩),
+                  h_ftc_right 1 ⟨by norm_num, le_refl _⟩ 0 ⟨le_refl _, by norm_num⟩,
+                  h_ftc_left 0 ⟨by norm_num, le_refl _⟩ (-1) ⟨le_refl _, by norm_num⟩]
+              ring
+
+      have h_out_right (p : ℝ) : ∫ t in 1..p, deriv f t = f p - f 1 := by
+        rcases le_or_gt p 1 with h_le | h_gt
+        · rw [← intervalIntegral.integral_add_adjacent_intervals (h_int_all 1 0) (h_int_all 0 p)]
+          rcases le_or_gt p 0 with hp0 | hp0
+          · rw [← intervalIntegral.integral_add_adjacent_intervals (h_int_all 0 (-1)) (h_int_all (-1) p)]
+            rcases le_or_gt p (-1) with hp_1 | hp_1
+            · rw [h_ftc_right 1 ⟨by norm_num, le_refl _⟩ 0 ⟨le_refl _, by norm_num⟩,
+                  h_ftc_left 0 ⟨by norm_num, le_refl _⟩ (-1) ⟨le_refl _, by norm_num⟩,
+                  h_ftc_out (-1) p (Or.inl ⟨le_refl _, hp_1⟩)]
+              ring
+            · rw [h_ftc_right 1 ⟨by norm_num, le_refl _⟩ 0 ⟨le_refl _, by norm_num⟩,
+                  h_ftc_left 0 ⟨by norm_num, le_refl _⟩ (-1) ⟨le_refl _, by norm_num⟩,
+                  h_ftc_left (-1) ⟨le_refl _, by norm_num⟩ p ⟨hp_1.le, hp0⟩]
+              ring
+          · rw [h_ftc_right 1 ⟨by norm_num, le_refl _⟩ 0 ⟨le_refl _, by norm_num⟩,
+                h_ftc_right 0 ⟨le_refl _, by norm_num⟩ p ⟨hp0.le, h_le⟩]
+            ring
+        · exact h_ftc_out 1 p (Or.inr ⟨le_refl _, h_gt.le⟩)
+
+      rw [h_out_left x, h_out_right y]
+      ring
+    exact (h_AC a b).symm
+
+lemma ϕ_pm_deriv_zero_outside (ν ε : ℝ) {t : ℝ} (ht : t < -1 ∨ t > 1) :
+    deriv (ϕ_pm ν ε) t = 0 := by
+  have h_nhds : (Set.Icc (-1 : ℝ) 1)ᶜ ∈ nhds t :=
+    isClosed_Icc.isOpen_compl.mem_nhds (by
+      simp only [Set.mem_compl_iff, Set.mem_Icc, not_and, not_le]
+      rcases ht with h | h <;> (intro; linarith))
+  have h_eq : ϕ_pm ν ε =ᶠ[nhds t] (fun _ ↦ (0 : ℂ)) := by
+    filter_upwards [h_nhds] with x hx; unfold ϕ_pm; exact if_neg hx
+  rw [h_eq.deriv_eq, deriv_const]
+
+lemma ϕ_pm_deriv_Iic_finite (ν ε : ℝ) :
+    eVariationOn (deriv (ϕ_pm ν ε)) (Set.Iic (-1 : ℝ)) ≠ ⊤ := by
+  set g := deriv (ϕ_pm ν ε)
+  have hg_zero : ∀ t < -1, g t = 0 := fun t ht ↦ ϕ_pm_deriv_zero_outside ν ε (Or.inl ht)
+  apply ne_top_of_le_ne_top (edist_lt_top (g (-1)) 0).ne
+  apply iSup_le; rintro ⟨n, u, hu, hu_mem⟩
+  by_cases h_any : ∃ i ∈ Finset.range (n + 1), u i = -1
+  · let S := (Finset.range (n + 1)).filter (fun i ↦ u i = -1)
+    have hS : S.Nonempty := by
+      obtain ⟨i, hi_mem, hi_eq⟩ := h_any
+      exact ⟨i, Finset.mem_filter.mpr ⟨hi_mem, hi_eq⟩⟩
+    let k := S.min' hS
+    have hk_mem : k ∈ S := Finset.min'_mem S hS
+    have hu_k : u k = -1 := (Finset.mem_filter.mp hk_mem).2
+    have hu_lt : ∀ i < k, u i < -1 := by
+      intro i hi
+      apply lt_of_le_of_ne (hu_mem i)
+      intro h_eq
+      have hi_S : i ∈ S := Finset.mem_filter.mpr ⟨by
+        have hk_range := (Finset.mem_filter.mp hk_mem).1
+        apply Finset.mem_range.mpr
+        exact lt_trans hi (Finset.mem_range.mp hk_range), h_eq⟩
+      have : k ≤ i := S.min'_le i hi_S
+      omega
+    have hk_range : k < n + 1 := Finset.mem_range.mp (Finset.mem_filter.mp hk_mem).1
+    have hk_n : k ≤ n := Nat.le_of_lt_succ hk_range
+    have hu_eq : ∀ i ≥ k, i ≤ n → u i = -1 := fun i hi h_in ↦
+      le_antisymm (hu_mem i) (hu_k ▸ hu hi)
+    calc ∑ i ∈ Finset.range n, edist (g (u (i + 1))) (g (u i))
+      _ = ∑ i ∈ Finset.range n, if i + 1 = k then edist (g (-1)) 0 else 0 := by
+        apply Finset.sum_congr rfl; intro i hi
+        have hi_n : i < n := Finset.mem_range.mp hi
+        split_ifs with h_eq_k
+        · have : u (i + 1) = -1 := by rw [h_eq_k, hu_k]
+          have : u i < -1 := hu_lt _ (by omega)
+          rw [‹u (i + 1) = -1›, hg_zero _ ‹u i < -1›]
+        · by_cases h_lt_k : i + 1 < k
+          · have : u (i + 1) < -1 := hu_lt _ h_lt_k
+            have : u i < -1 := hu_lt _ (by omega)
+            rw [hg_zero _ ‹u (i + 1) < -1›, hg_zero _ ‹u i < -1›, edist_self]
+          · have : i ≥ k := by omega
+            have : u (i + 1) = -1 := hu_eq _ (by omega) (by omega)
+            have : u i = -1 := hu_eq _ (by omega) (by omega)
+            rw [‹u (i + 1) = -1›, ‹u i = -1›, edist_self]
+      _ ≤ edist (g (-1)) 0 := by
+        rw [Finset.sum_ite]; simp only [Finset.sum_const_zero, add_zero]
+        let fS := (Finset.range n).filter (fun i ↦ i + 1 = k)
+        have h_card : fS.card ≤ 1 := by
+          apply Finset.card_le_one_iff.mpr
+          intro x y hx hy
+          have hx' := Finset.mem_filter.mp hx
+          have hy' := Finset.mem_filter.mp hy
+          omega
+        calc (fS.sum (fun _ ↦ edist (g (-1)) 0))
+          _ = fS.card • edist (g (-1)) 0 := Finset.sum_const _
+          _ ≤ 1 • edist (g (-1)) 0 := by gcongr
+          _ = edist (g (-1)) 0 := by simp
+  · have h_lt : ∀ i ≤ n, u i < -1 := by
+      intro i hi
+      apply lt_of_le_of_ne (hu_mem i)
+      intro h_eq
+      apply h_any; exact ⟨i, Finset.mem_range.mpr (Nat.lt_succ_of_le hi), h_eq⟩
+    calc ∑ i ∈ Finset.range n, edist (g (u (i + 1))) (g (u i))
+      _ = ∑ i ∈ Finset.range n, 0 := by
+        apply Finset.sum_congr rfl; intro i hi
+        have hi_n : i < n := Finset.mem_range.mp hi
+        rw [hg_zero _ (h_lt (i + 1) hi_n), hg_zero _ (h_lt i hi_n.le), edist_self]
+      _ = 0 := by simp
+      _ ≤ edist (g (-1)) 0 := zero_le _
+
+lemma ϕ_pm_deriv_Ici_finite (ν ε : ℝ) :
+    eVariationOn (deriv (ϕ_pm ν ε)) (Set.Ici (1 : ℝ)) ≠ ⊤ := by
+  set g := deriv (ϕ_pm ν ε)
+  have hg_zero : ∀ t > 1, g t = 0 := fun t ht ↦ ϕ_pm_deriv_zero_outside ν ε (Or.inr ht)
+  apply ne_top_of_le_ne_top (edist_lt_top (g 1) 0).ne
+  apply iSup_le; rintro ⟨n, u, hu, hu_mem⟩
+  by_cases h_any : ∃ i ∈ Finset.range (n + 1), u i = 1
+  · let S := (Finset.range (n + 1)).filter (fun i ↦ u i = 1)
+    have hS : S.Nonempty := by
+      obtain ⟨i, hi_mem, hi_eq⟩ := h_any
+      exact ⟨i, Finset.mem_filter.mpr ⟨hi_mem, hi_eq⟩⟩
+    let k := S.max' hS
+    have hk_mem : k ∈ S := Finset.max'_mem S hS
+    have hk_range : k < n + 1 := Finset.mem_range.mp (Finset.mem_filter.mp hk_mem).1
+    have hu_k : u k = 1 := (Finset.mem_filter.mp hk_mem).2
+    have hu_gt : ∀ i > k, i ≤ n → u i > 1 := by
+      intro i hi hi_n
+      apply lt_of_le_of_ne (hu_mem i)
+      intro h_eq
+      have hi_S : i ∈ S := Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Nat.lt_succ_of_le hi_n), h_eq.symm⟩
+      have : i ≤ k := S.le_max' i hi_S
+      omega
+    have hu_eq : ∀ i ≤ k, u i = 1 := fun i hi ↦
+      le_antisymm (hu_k ▸ hu hi) (hu_mem i)
+    calc ∑ i ∈ Finset.range n, edist (g (u (i + 1))) (g (u i))
+      _ = ∑ i ∈ Finset.range n, if i = k then edist (g 1) 0 else 0 := by
+        apply Finset.sum_congr rfl; intro i hi
+        have hi_n : i < n := Finset.mem_range.mp hi
+        split_ifs with h_eq_k
+        · have : u i = 1 := by rw [h_eq_k, hu_k]
+          have : u (i + 1) > 1 := hu_gt _ (by omega) (by omega)
+          rw [‹u i = 1›, hg_zero _ ‹u (i + 1) > 1›, edist_comm]
+        · by_cases h_lt_k : i < k
+          · have : u (i + 1) = 1 := hu_eq _ (by omega)
+            have : u i = 1 := hu_eq _ (by omega)
+            rw [‹u (i + 1) = 1›, ‹u i = 1›, edist_self]
+          · have : i > k := by omega
+            have : u (i + 1) > 1 := hu_gt _ (by omega) (by omega)
+            have : u i > 1 := hu_gt _ (by omega) (by omega)
+            rw [hg_zero _ ‹u (i + 1) > 1›, hg_zero _ ‹u i > 1›, edist_self]
+      _ ≤ edist (g 1) 0 := by
+        rw [Finset.sum_ite]; simp only [Finset.sum_const_zero, add_zero]
+        let fS := (Finset.range n).filter (fun i ↦ i = k)
+        have h_card : fS.card ≤ 1 := by
+          apply Finset.card_le_one_iff.mpr
+          intro x y hx hy
+          have hx' := Finset.mem_filter.mp hx
+          have hy' := Finset.mem_filter.mp hy
+          exact hx'.2.trans hy'.2.symm
+        calc (fS.sum (fun _ ↦ edist (g 1) 0))
+          _ = fS.card • edist (g 1) 0 := Finset.sum_const _
+          _ ≤ 1 • edist (g 1) 0 := by gcongr
+          _ = edist (g 1) 0 := by simp
+  · have h_gt : ∀ i ≤ n, u i > 1 := by
+      intro i hi
+      apply lt_of_le_of_ne (hu_mem i)
+      intro h_eq
+      apply h_any; exact ⟨i, Finset.mem_range.mpr (Nat.lt_succ_of_le hi), h_eq.symm⟩
+    calc ∑ i ∈ Finset.range n, edist (g (u (i + 1))) (g (u i))
+      _ = ∑ i ∈ Finset.range n, 0 := by
+        apply Finset.sum_congr rfl; intro i hi
+        have hi_n : i < n := Finset.mem_range.mp hi
+        rw [hg_zero _ (h_gt (i + 1) hi_n), hg_zero _ (h_gt i hi_n.le), edist_self]
+      _ = 0 := by simp
+      _ ≤ edist (g 1) 0 := zero_le _
+
+
 
 @[blueprint
   "varphi-deriv-tv"
@@ -4048,7 +4539,154 @@ theorem varphi_deriv_integ (ν ε : ℝ) (hlam : ν ≠ 0) : Integrable (deriv (
   (latexEnv := "lemma")
   (discussion := 1229)]
 theorem varphi_deriv_tv (ν ε : ℝ) (hlam : ν ≠ 0) : BoundedVariationOn (deriv (ϕ_pm ν ε)) Set.univ := by
-    sorry
+  -- Abbreviate the derivative function.
+  set g := deriv (ϕ_pm ν ε)
+  -- Step 1: The derivative is C¹ on [-1,0] because ϕ is C² there (ϕ_c2_left).
+  -- From ContDiffOn ℝ 2 on [-1,0], we get ContDiffOn ℝ 1 on the derivative.
+  -- Since [-1,0] is compact and convex, ContDiffOn ℝ 1 → LipschitzOnWith (via
+  --   ContDiffOn.exists_lipschitzOnWith, which requires convexity + compactness).
+  -- LipschitzOnWith → LocallyBoundedVariationOn → BoundedVariationOn on Icc.
+  have hBV_left : BoundedVariationOn g (Set.Icc (-1 : ℝ) 0) := by
+    have h_c2 : ContDiffOn ℝ 2 (ϕ_pm ν ε) (Set.Icc (-1) 0) := ϕ_c2_left ν ε hlam
+    -- Work with the within-derivative on [-1,0], which is what ContDiffOn sees.
+    set dw := derivWithin (ϕ_pm ν ε) (Set.Icc (-1 : ℝ) 0) with hdw_def
+    -- A: dw is C¹ on [-1,0].
+    -- ContDiffOn.derivWithin : ContDiffOn ℝ n f s → UniqueDiffOn ℝ s → m+1 ≤ n
+    --   → ContDiffOn ℝ m (derivWithin f s) s
+    -- Apply with n=2, m=1 (so 1+1=2≤2), using uniqueDiffOn_Icc (already in the file at L4037).
+    have h_dw_c1 : ContDiffOn ℝ 1 dw (Set.Icc (-1 : ℝ) 0) :=
+      h_c2.derivWithin (uniqueDiffOn_Icc (by norm_num)) (by norm_num)
+    -- B: C¹ on convex compact → LipschitzOnWith.
+    -- ContDiffOn.exists_lipschitzOnWith (n≠0, convex, compact) → ∃ K, LipschitzOnWith K dw s.
+    obtain ⟨K, hK⟩ := h_dw_c1.exists_lipschitzOnWith (by norm_num) (convex_Icc _ _) isCompact_Icc
+    -- C: Lipschitz → locally BV on Icc ⊆ ℝ.
+    -- LipschitzOnWith.locallyBoundedVariationOn :
+    --   LipschitzOnWith C (f : ℝ → E) s → LocallyBoundedVariationOn f s
+    -- D: Locally BV at endpoints (-1, 0 ∈ Icc -1 0) → BV on Icc.
+    -- LocallyBoundedVariationOn f s = ∀ a b ∈ s, BoundedVariationOn f (s ∩ Icc a b).
+    -- Apply at a=-1, b=0; then strip the self-intersection by .mono inter_subset_left.
+    have hBV_dw : BoundedVariationOn dw (Set.Icc (-1 : ℝ) 0) := by
+      simpa using hK.locallyBoundedVariationOn (-1) 0 (Set.left_mem_Icc.mpr (by norm_num)) (Set.right_mem_Icc.mpr (by norm_num))
+    -- E: Transfer BV from dw to g via eVariationOn.eq_of_eqOn.
+    -- eVariationOn.eq_of_eqOn : EqOn f f' s → eVariationOn f s = eVariationOn f' s.
+    -- On Ioo (-1) 0: deriv ϕ = derivWithin ϕ (Ioo) = derivWithin ϕ (Icc) = dw,
+    --   same two-step derivWithin_of_isOpen / derivWithin_subset used at L4043-4048.
+    -- At boundary {-1, 0}: ϕ is globally differentiable there (ϕ = 0 outside,
+    --   and C² inside, so the global derivative equals the within-derivative), sorry'd here.
+    have h_eq_on : Set.EqOn g dw (Set.Icc (-1 : ℝ) 0) := by
+      intro x hx
+      simp only [g, hdw_def]
+      by_cases hxo : x ∈ Set.Ioo (-1 : ℝ) 0
+      · -- Interior: deriv = derivWithin (Ioo) = derivWithin (Icc). Pattern from L4043-4048.
+        have h1 : derivWithin (ϕ_pm ν ε) (Set.Ioo (-1) 0) x = deriv (ϕ_pm ν ε) x :=
+          derivWithin_of_isOpen isOpen_Ioo hxo
+        have h2 : derivWithin (ϕ_pm ν ε) (Set.Ioo (-1) 0) x =
+            derivWithin (ϕ_pm ν ε) (Set.Icc (-1) 0) x :=
+          derivWithin_subset Set.Ioo_subset_Icc_self (isOpen_Ioo.uniqueDiffWithinAt hxo)
+            ((ϕ_c2_left ν ε hlam).differentiableOn (by norm_num) x
+              (Set.Ioo_subset_Icc_self hxo))
+        rw [← h1, h2]
+      · -- Boundary {-1} or {0}: both sides equal via DifferentiableAt ϕ x,
+        --   which holds since ϕ = 0 outside Icc -1 1 makes the left/right limits match.
+        -- Case x = 0 or x = -1
+        have h_diff : DifferentiableAt ℝ (ϕ_pm ν ε) x := by
+          -- For x = 0: Use glueing lemma for left/right C²
+          -- For x = -1: Use that ϕ is 0 on the left and smooth on the right
+
+          exact (ϕ_differentiable ν ε hlam) x
+
+        rw [h_diff.derivWithin (uniqueDiffOn_Icc (by norm_num) x hx)]
+
+    rw [BoundedVariationOn] at hBV_dw ⊢
+    rwa [eVariationOn.eq_of_eqOn h_eq_on]
+
+  -- Step 2: Mirror of Step 1 using ϕ_c2_right instead of ϕ_c2_left.
+  have hBV_right : BoundedVariationOn g (Set.Icc (0 : ℝ) 1) := by
+    have h_c2 : ContDiffOn ℝ 2 (ϕ_pm ν ε) (Set.Icc 0 1) := ϕ_c2_right ν ε hlam
+    set dw := derivWithin (ϕ_pm ν ε) (Set.Icc (0 : ℝ) 1) with hdw_def
+    have h_dw_c1 : ContDiffOn ℝ 1 dw (Set.Icc (0 : ℝ) 1) :=
+      h_c2.derivWithin (uniqueDiffOn_Icc (by norm_num)) (by norm_num)
+    obtain ⟨K, hK⟩ := h_dw_c1.exists_lipschitzOnWith (by norm_num) (convex_Icc _ _) isCompact_Icc
+    have hBV_dw : BoundedVariationOn dw (Set.Icc (0 : ℝ) 1) := by
+      simpa using hK.locallyBoundedVariationOn 0 1 (Set.left_mem_Icc.mpr (by norm_num)) (Set.right_mem_Icc.mpr (by norm_num))
+    have h_eq_on : Set.EqOn g dw (Set.Icc (0 : ℝ) 1) := by
+      intro x hx
+      simp only [g, hdw_def]
+      by_cases hxo : x ∈ Set.Ioo (0 : ℝ) 1
+      · have h1 : derivWithin (ϕ_pm ν ε) (Set.Ioo 0 1) x = deriv (ϕ_pm ν ε) x :=
+          derivWithin_of_isOpen isOpen_Ioo hxo
+        have h2 : derivWithin (ϕ_pm ν ε) (Set.Ioo 0 1) x =
+            derivWithin (ϕ_pm ν ε) (Set.Icc 0 1) x :=
+          derivWithin_subset Set.Ioo_subset_Icc_self (isOpen_Ioo.uniqueDiffWithinAt hxo)
+            ((ϕ_c2_right ν ε hlam).differentiableOn (by norm_num) x
+              (Set.Ioo_subset_Icc_self hxo))
+        rw [← h1, h2]
+      · have h_diff : DifferentiableAt ℝ (ϕ_pm ν ε) x := by
+          -- For x = 0: Use glueing lemma for left/right C²
+          -- For x = -1: Use that ϕ is 0 on the left and smooth on the right
+
+          exact (ϕ_differentiable ν ε hlam) x
+
+        rw [h_diff.derivWithin (uniqueDiffOn_Icc (by norm_num) x hx)]
+
+    rw [BoundedVariationOn] at hBV_dw ⊢
+    rwa [eVariationOn.eq_of_eqOn h_eq_on]
+  -- Step 3: Combine BV on [-1,0] and [0,1] to get BV on [-1,1] via
+  --   eVariationOn.Icc_add_Icc, which states:
+  --   eVariationOn f (s ∩ Icc a b) + eVariationOn f (s ∩ Icc b c)
+  --     = eVariationOn f (s ∩ Icc a c)   (for a ≤ b ≤ c, b ∈ s)
+  --   With s = univ (i.e., Icc), this gives BV on Icc (-1) 1.
+  have hBV_Icc : BoundedVariationOn g (Set.Icc (-1 : ℝ) 1) := by
+    -- BoundedVariationOn is eVariationOn ≠ ⊤.
+    -- eVariationOn g (Icc -1 1)
+    --   = eVariationOn g (Icc -1 0) + eVariationOn g (Icc 0 1)
+    --   (by eVariationOn.Icc_add_Icc with b = 0 ∈ s = univ)
+    -- Both summands are finite by hBV_left, hBV_right.
+    -- Concretely we can rewrite with Icc_add_Icc and use ENNReal.add_ne_top.
+    simp only [BoundedVariationOn] at hBV_left hBV_right ⊢
+    have h_split :
+        eVariationOn g (Set.Icc (-1 : ℝ) 0) + eVariationOn g (Set.Icc (0 : ℝ) 1) =
+        eVariationOn g (Set.Icc (-1 : ℝ) 1) := by
+      -- Use eVariationOn.Icc_add_Icc:
+      -- eVariationOn f (s ∩ Icc a b) + eVariationOn f (s ∩ Icc b c)
+      --   = eVariationOn f (s ∩ Icc a c) (hab : a ≤ b) (hbc : b ≤ c) (hb : b ∈ s)
+      -- Here s = univ, so s ∩ Icc x y = Icc x y.
+      have key := eVariationOn.Icc_add_Icc g (a := (-1 : ℝ)) (b := 0) (c := 1)
+        (by norm_num) (by norm_num) (Set.mem_univ _)
+      simp only [Set.univ_inter] at key
+      exact key
+    rw [← h_split]
+    exact ENNReal.add_ne_top.mpr ⟨hBV_left, hBV_right⟩
+  -- Step 4: Lift BV on [-1,1] to BV on Set.univ.
+  -- We split ℝ = Iic(-1) ∪ Icc(-1,1) ∪ Ici(1) using eVariationOn.union twice.
+  -- The two outer pieces contribute finite variation (only one boundary jump each
+  -- since g = 0 on Iio(-1) and Ioi(1)), so the total is finite.
+  simp only [BoundedVariationOn] at hBV_Icc ⊢
+  -- Splitting step 1: univ = Iic(-1) ∪ Ici(-1)
+  -- (Set.Iic_union_Ici : Iic a ∪ Ici a = univ)
+  -- isGreatest_Iic : IsGreatest (Iic a) a
+  -- isLeast_Ici    : IsLeast (Ici a) a
+  have h_split1 : eVariationOn g Set.univ =
+      eVariationOn g (Set.Iic (-1 : ℝ)) + eVariationOn g (Set.Ici (-1 : ℝ)) := by
+    conv_lhs => rw [← Set.Iic_union_Ici (a := (-1 : ℝ))]
+    exact eVariationOn.union g isGreatest_Iic isLeast_Ici
+  -- Splitting step 2: Ici(-1) = Icc(-1,1) ∪ Ici(1)
+  -- (Set.Icc_union_Ici_eq_Ici : Icc a b ∪ Ici b = Ici a when a ≤ b)
+  -- isGreatest_Icc (h : a ≤ b) : IsGreatest (Icc a b) b
+  have h_split2 : eVariationOn g (Set.Ici (-1 : ℝ)) =
+      eVariationOn g (Set.Icc (-1 : ℝ) 1) + eVariationOn g (Set.Ici (1 : ℝ)) := by
+    conv_lhs => rw [← Set.Icc_union_Ici_eq_Ici (by norm_num : (-1 : ℝ) ≤ 1)]
+    exact eVariationOn.union g (isGreatest_Icc (by norm_num)) isLeast_Ici
+  -- Left outer piece: g = 0 on Iio(-1) (from hf_deriv in varphi_ftc_out),
+  -- so any monotone sequence in Iic(-1) maps g to {0, g(-1)}.  The variation
+  -- is at most edist(g(-1)) 0, which is < ⊤ by ENNReal.edist_lt_top.
+  -- Proof: apply iSup_le; rintro ⟨n, u, hu, hu_mem⟩; bound each edist term.
+  have hIic := ϕ_pm_deriv_Iic_finite ν ε
+  have hIci := ϕ_pm_deriv_Ici_finite ν ε
+  -- Combine all three finite pieces.
+  rw [h_split1, h_split2]
+  exact ENNReal.add_ne_top.mpr
+    ⟨hIic, ENNReal.add_ne_top.mpr ⟨hBV_Icc, hIci⟩⟩
 
 @[blueprint
   "varphi-fourier-decay"
@@ -4058,7 +4696,17 @@ theorem varphi_deriv_tv (ν ε : ℝ) (hlam : ν ≠ 0) : BoundedVariationOn (de
   (latexEnv := "corollary")
   (discussion := 1230)]
 theorem varphi_fourier_decay (ν ε : ℝ) (hlam : ν ≠ 0) : IsBigO Filter.atTop (fun x:ℝ ↦ (𝓕 (ϕ_pm ν ε) x).re) (fun x:ℝ ↦ 1 / x ^ 2)  := by
-    sorry
+  let C := (eVariationOn (deriv (ϕ_pm ν ε)) Set.univ).toReal / (2 * π) ^ 2
+  have h_bound : ∀ x > 0, ‖𝓕 (ϕ_pm ν ε) x‖ ≤ C * ‖1 / x ^ 2‖ := by
+    intro x hx
+    have h_pd := prelim_decay_3 (ϕ_pm ν ε) (varphi_integ ν ε hlam) (varphi_abs ν ε hlam) (varphi_deriv_tv ν ε hlam) x (ne_of_gt hx)
+    rw [mul_pow, ← div_div, norm_of_nonneg hx.le] at h_pd
+    rw [Real.norm_eq_abs, abs_of_pos (by positivity), one_div]
+    exact h_pd
+  apply Asymptotics.IsBigO.of_bound C
+  filter_upwards [Filter.eventually_gt_atTop (0 : ℝ)] with x hx
+  have h_re_le_norm : ‖(𝓕 (ϕ_pm ν ε) x).re‖ ≤ ‖𝓕 (ϕ_pm ν ε) x‖ := Complex.abs_re_le_norm _
+  exact h_re_le_norm.trans (h_bound x hx)
 
 @[blueprint
   "varphi-fourier-minus-error"
