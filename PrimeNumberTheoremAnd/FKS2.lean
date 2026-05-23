@@ -2752,7 +2752,6 @@ theorem lemma_20_b {x : ℝ} (hx : x > 6.58) :
   · linarith [Li_identity' (a := 6.58) (b := x) (by norm_num) (by linarith),
       Li_six_fifty_eight_sub_div_log_pos, integral_one_div_log_sq_ge (x := x) (by linarith)]
   · exact div_pos (by linarith) (pow_pos (log_pos (by linarith)) 2)
-end FKS2
 
 -- Integrability of Eθ t / log t ^ 2
 private lemma Eθ_integrable {x y : ℝ} (hx : 2 ≤ x) (hy : x ≤ y) :
