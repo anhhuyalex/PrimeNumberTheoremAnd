@@ -329,6 +329,31 @@ lemma LadderParams.conj_mem_Rpos_iff_mem_RposBar (l : LadderParams) {z : ℂ} :
     Complex.conj_re, Complex.conj_im, Set.mem_Icc]
   constructor <;> rintro ⟨hre, h1, h2⟩ <;> exact ⟨hre, by linarith, by linarith⟩
 
+/-- The upper and lower off-axis strips are disjoint. -/
+lemma LadderParams.disjoint_Rpos_RposBar (l : LadderParams) : Disjoint l.Rpos l.RposBar := by
+  rw [Set.disjoint_left]
+  intro z hz_pos hz_neg
+  linarith [hz_pos.2.1, hz_neg.2.2, l.hδ.1]
+
+/-- A point of `R \ RC` lies either in the upper strip `Rpos` or in the lower strip `RposBar`. -/
+lemma LadderParams.mem_Rpos_or_mem_RposBar_of_mem_R_diff_RC (l : LadderParams) {z : ℂ} :
+    z ∈ l.R \ l.RC → z ∈ l.Rpos ∨ z ∈ l.RposBar := by
+  intro hz
+  have hre : z.re ≤ 1 := hz.1.1
+  have himT : |z.im| ≤ l.T := hz.1.2
+  have hnot_RC : ¬ |z.im| ≤ l.δ := by
+    intro himδ
+    exact hz.2 ⟨hre, himδ⟩
+  have hδlt : l.δ < |z.im| := lt_of_not_ge hnot_RC
+  by_cases h_im_nonneg : 0 ≤ z.im
+  · left
+    rw [abs_of_nonneg h_im_nonneg] at himT hδlt
+    exact ⟨hre, hδlt.le, himT⟩
+  · right
+    have h_im_neg : z.im < 0 := lt_of_not_ge h_im_nonneg
+    rw [abs_of_neg h_im_neg] at himT hδlt
+    exact ⟨hre, by linarith, by linarith⟩
+
 /-- The open strip below the contour lies in the closed strip between `C` and `C̄`. -/
 lemma LadderParams.belowContour_subset_RC (l : LadderParams) : l.belowContour ⊆ l.RC := by
   intro z hz
@@ -3120,8 +3145,9 @@ theorem lemma_5_1_h (hx₀ : 1 ≤ x₀) (hx : x₀ < x)
   (title := "Contour shifting (CH2 Lemma 5.1)")
   (statement := /--
   Let $G = G^\circ + \mathrm{sgn}(\Im s)\, G^\star$ with $G^\circ, G^\star$ meromorphic on
-  $R = (-\infty,1] + i[-T,T]$, and suppose $G^\star(\bar s) = -\overline{G^\star(s)}$. Suppose for
-  some $x_0 \geq 1$ that $G(s) x_0^s$ is bounded with no poles on $\partial R$, and both
+  $R = (-\infty,1] + i[-T,T]$, and suppose $G^\circ(\bar s) = \overline{G^\circ(s)}$ and
+  $G^\star(\bar s) = -\overline{G^\star(s)}$. Suppose for some $x_0 \geq 1$ that $G(s) x_0^s$ is
+  bounded with no poles on $\partial R$, and both
   $G^\circ(s) x_0^s$ and $G^\star(s) x_0^s$ are bounded with no poles on the ladder $L$ and the
   contour $C$. Then for any $x > x_0$,
   $$ \frac{1}{2\pi i} \int_{1-iT}^{1+iT} G(s) x^s\, ds = \frac{1}{2\pi i} \int_{C_\infty} G(s) x^s\, ds + \frac{1}{\pi} \Im \int_C G^\star(s) x^s\, ds + \sum_{\rho \in R \setminus R_C} \mathrm{Res}_{s=\rho} G(s) x^s + \sum_{\rho \in R_C} \mathrm{Res}_{s=\rho} G^\circ(s) x^s, $$
@@ -3153,10 +3179,227 @@ theorem lemma_5_1_h (hx₀ : 1 ≤ x₀) (hx : x₀ < x)
   claim. -/)
   (latexEnv := "lemma")
   (discussion := 1456)]
+
+private lemma lemma_5_1_mero_pos {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x : ℝ}
+    (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
+    (hG_circ_mero : MeromorphicOn G_circ l.R)
+    (hG_star_mero : MeromorphicOn G_star l.R)
+    (hx : 0 < x) :
+    MeromorphicOn (fun s ↦ G s * (x : ℂ) ^ s) l.Rpos := by
+  apply MeromorphicOn.congr (f := fun s ↦ (G_circ s + G_star s) * (x : ℂ) ^ s)
+  · have h1 : MeromorphicOn (fun s ↦ (x : ℂ) ^ s) l.Rpos := fun z _ ↦ meromorphicAt_rpow hx z
+    have h2 : MeromorphicOn (G_circ + G_star) l.Rpos := (hG_circ_mero.add hG_star_mero).mono l.Rpos_subset_R
+    exact h2.mul h1 |>.congr (fun _ _ => by ring)
+  · intro z hz
+    have hz_pos : 0 < z.im := by linarith [hz.2.1, l.hδ.1]
+    have h_sign : (Real.sign z.im : ℂ) = 1 := by simp [Real.sign_of_pos hz_pos]
+    calc (G_circ z + G_star z) * (x : ℂ) ^ z
+      _ = (G_circ z + 1 * G_star z) * (x : ℂ) ^ z := by ring
+      _ = (G_circ z + ↑(Real.sign z.im) * G_star z) * (x : ℂ) ^ z := by rw [h_sign]
+      _ = G z * (x : ℂ) ^ z := by rw [← hG z]
+
+private lemma lemma_5_1_mero_neg {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x : ℝ}
+    (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
+    (hG_circ_mero : MeromorphicOn G_circ l.R)
+    (hG_star_mero : MeromorphicOn G_star l.R)
+    (hx : 0 < x) :
+    MeromorphicOn (fun s ↦ G s * (x : ℂ) ^ s) l.RposBar := by
+  apply MeromorphicOn.congr (f := fun s ↦ (G_circ s - G_star s) * (x : ℂ) ^ s)
+  · have h1 : MeromorphicOn (fun s ↦ (x : ℂ) ^ s) l.RposBar := fun z _ ↦ meromorphicAt_rpow hx z
+    have h2 : MeromorphicOn (G_circ - G_star) l.RposBar := (hG_circ_mero.sub hG_star_mero).mono l.RposBar_subset_R
+    exact h2.mul h1 |>.congr (fun _ _ => by ring)
+  · intro z hz
+    have hz_neg : z.im < 0 := by linarith [hz.2.2, l.hδ.1]
+    have h_sign : (Real.sign z.im : ℂ) = -1 := by simp [Real.sign_of_neg hz_neg]
+    calc (G_circ z - G_star z) * (x : ℂ) ^ z
+      _ = (G_circ z + (-1) * G_star z) * (x : ℂ) ^ z := by ring
+      _ = (G_circ z + ↑(Real.sign z.im) * G_star z) * (x : ℂ) ^ z := by rw [h_sign]
+      _ = G z * (x : ℂ) ^ z := by rw [← hG z]
+
+private lemma lemma_5_1_Rpos_pole_not_RC {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x₀ x : ℝ}
+    (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
+    (hG_circ_mero : MeromorphicOn G_circ l.R)
+    (hG_star_mero : MeromorphicOn G_star l.R)
+    (hx₀ : 1 ≤ x₀)
+    (hGc_contour : IsBoundedNoPolesOn (fun s ↦ G_circ s * (x₀ : ℂ) ^ s) l.admissible_contour)
+    (hGs_contour : IsBoundedNoPolesOn (fun s ↦ G_star s * (x₀ : ℂ) ^ s) l.admissible_contour)
+    (hx : x₀ < x)
+    (z : ℂ) (hz : z ∈ l.Rpos) (hz_pole : meromorphicOrderAt (fun s ↦ G s * (x : ℂ) ^ s) z < 0) :
+    z ∉ l.RC := by
+  intro hRC
+  have h_im_eq : z.im = l.δ := le_antisymm (abs_le.mp hRC.2).2 hz.2.1
+  have hz_ac : z ∈ l.admissible_contour := Or.inl ⟨hz.1, h_im_eq⟩
+  have hpos_mem : {t : ℂ | 0 < t.im} ∈ nhds z :=
+    (isOpen_lt continuous_const Complex.continuous_im).mem_nhds (by linarith [l.hδ.1, h_im_eq])
+  have hG_eq : G =ᶠ[nhds z] G_circ + G_star := by
+    filter_upwards [hpos_mem] with t ht
+    have hsign : (Real.sign t.im : ℂ) = 1 := by simp [Real.sign_of_pos ht]
+    simp [hG t, hsign]
+  have hGc_mero := hG_circ_mero z (l.admissible_contour_subset_R hz_ac)
+  have hGs_mero := hG_star_mero z (l.admissible_contour_subset_R hz_ac)
+  have h_ord_c := meromorphicOrderAt_nonneg_on_of_bounded l hx₀ l.admissible_contour_subset_R hG_circ_mero hGc_contour z hz_ac
+  have h_ord_s := meromorphicOrderAt_nonneg_on_of_bounded l hx₀ l.admissible_contour_subset_R hG_star_mero hGs_contour z hz_ac
+  have h_ord_G := meromorphicOrderAt_add_nonneg hGc_mero hGs_mero hG_eq h_ord_c h_ord_s
+  have hG_mero : MeromorphicAt G z := (hGc_mero.add hGs_mero).congr (hG_eq.symm.filter_mono nhdsWithin_le_nhds)
+  have h_ord_F : 0 ≤ meromorphicOrderAt (fun s ↦ G s * (x : ℂ) ^ s) z := by
+    have hx_pos : 0 < x := by linarith
+    rw [← meromorphicOrderAt_mul_cpow_eq hx_pos hG_mero] at h_ord_G
+    exact h_ord_G
+  exact absurd hz_pole (not_lt.mpr h_ord_F)
+
+private lemma lemma_5_1_RposBar_pole_not_RC {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x₀ x : ℝ}
+    (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
+    (hG_circ_mero : MeromorphicOn G_circ l.R)
+    (hG_star_mero : MeromorphicOn G_star l.R)
+    (hG_circ_symm : ConjSymm G_circ)
+    (hG_star_symm : ConjAntisymm G_star)
+    (hx₀ : 1 ≤ x₀)
+    (hGc_contour : IsBoundedNoPolesOn (fun s ↦ G_circ s * (x₀ : ℂ) ^ s) l.admissible_contour)
+    (hGs_contour : IsBoundedNoPolesOn (fun s ↦ G_star s * (x₀ : ℂ) ^ s) l.admissible_contour)
+    (hx : x₀ < x)
+    (z : ℂ) (hz : z ∈ l.RposBar) (hz_pole : meromorphicOrderAt (fun s ↦ G s * (x : ℂ) ^ s) z < 0) :
+    z ∉ l.RC := by
+  intro hRC
+  have h_im_eq : z.im = -l.δ := le_antisymm hz.2.2 (by linarith [abs_le.mp hRC.2 |>.1])
+  have hz_ac : starRingEnd ℂ z ∈ l.admissible_contour := Or.inl ⟨hz.1, by simp [h_im_eq]⟩
+  have h_delta_le_T : |l.δ| ≤ l.T := by rw [abs_of_pos l.hδ.1]; linarith [l.hδ.2, l.hT]
+  have hz_R_star : starRingEnd ℂ z ∈ l.R := ⟨hz.1, by simpa [h_im_eq] using h_delta_le_T⟩
+  have hx₀_pos : 0 < x₀ := by linarith
+  have hw_pow_mero := meromorphicAt_rpow hx₀_pos (starRingEnd ℂ z)
+  have hw_pow_order := meromorphicOrderAt_rpow hx₀_pos (starRingEnd ℂ z)
+  have hGc_order : 0 ≤ meromorphicOrderAt G_circ z := by
+    rw [meromorphicOrderAt_starRingEnd (Or.inl hG_circ_symm)]
+    exact meromorphicOrderAt_nonneg_of_isBoundedNoPolesOn (hG_circ_mero _ hz_R_star) hw_pow_mero hw_pow_order hGc_contour hz_ac
+  have hGs_order : 0 ≤ meromorphicOrderAt G_star z := by
+    rw [meromorphicOrderAt_starRingEnd (Or.inr hG_star_symm)]
+    exact meromorphicOrderAt_nonneg_of_isBoundedNoPolesOn (hG_star_mero _ hz_R_star) hw_pow_mero hw_pow_order hGs_contour hz_ac
+  have hneg_mem : {t : ℂ | t.im < 0} ∈ nhds z :=
+    (isOpen_lt Complex.continuous_im continuous_const).mem_nhds (by linarith [l.hδ.1, h_im_eq])
+  have hG_eq : G =ᶠ[nhds z] G_circ - G_star := by
+    filter_upwards [hneg_mem] with t ht
+    have hsign : (Real.sign t.im : ℂ) = -1 := by simp [Real.sign_of_neg ht]
+    simp [hG t, hsign]; ring
+  have hGc_mero := hG_circ_mero z (l.RposBar_subset_R hz)
+  have hGs_mero := hG_star_mero z (l.RposBar_subset_R hz)
+  have h_ord_G := meromorphicOrderAt_add_nonneg hGc_mero hGs_mero.neg hG_eq hGc_order (meromorphicOrderAt_neg_nonneg hGs_mero hGs_order)
+  have hG_mero : MeromorphicAt G z := (hGc_mero.sub hGs_mero).congr (hG_eq.symm.filter_mono nhdsWithin_le_nhds)
+  have h_ord_F : 0 ≤ meromorphicOrderAt (fun s ↦ G s * (x : ℂ) ^ s) z := by
+    have hx_pos : 0 < x := by linarith
+    rw [← meromorphicOrderAt_mul_cpow_eq hx_pos hG_mero] at h_ord_G
+    exact h_ord_G
+  exact absurd hz_pole (not_lt.mpr h_ord_F)
+
+private lemma lemma_5_1_offAxis_tendsto {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x₀ x : ℝ}
+    (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
+    (hG_circ_mero : MeromorphicOn G_circ l.R)
+    (hG_star_mero : MeromorphicOn G_star l.R)
+    (hG_circ_symm : ConjSymm G_circ)
+    (hG_star_symm : ConjAntisymm G_star)
+    (hx₀ : 1 ≤ x₀)
+    (hGc_contour : IsBoundedNoPolesOn (fun s ↦ G_circ s * (x₀ : ℂ) ^ s) l.admissible_contour)
+    (hGs_contour : IsBoundedNoPolesOn (fun s ↦ G_star s * (x₀ : ℂ) ^ s) l.admissible_contour)
+    (hx : x₀ < x)
+    (hfin : {z ∈ l.R \ l.RC | meromorphicOrderAt (fun s ↦ G s * (x : ℂ) ^ s) z < 0}.Finite) :
+    Filter.Tendsto
+      (fun n : ℕ ↦
+        sumResiduesIn (fun s ↦ G s * (x : ℂ) ^ s) (l.Rpos ∩ {z | l.σ n < z.re}) +
+          sumResiduesIn (fun s ↦ G s * (x : ℂ) ^ s) (l.RposBar ∩ {z | l.σ n < z.re}))
+      Filter.atTop (nhds (sumResiduesIn (fun s ↦ G s * (x : ℂ) ^ s) (l.R \ l.RC))) := by
+  let F : ℂ → ℂ := fun s ↦ G s * (x : ℂ) ^ s
+  have hx_pos : 0 < x := by linarith
+  have h_mero_pos : MeromorphicOn F l.Rpos := lemma_5_1_mero_pos hG hG_circ_mero hG_star_mero hx_pos
+  have h_mero_neg : MeromorphicOn F l.RposBar := lemma_5_1_mero_neg hG hG_circ_mero hG_star_mero hx_pos
+  have hfin_pos : {z ∈ l.Rpos | meromorphicOrderAt F z < 0}.Finite := by
+    apply hfin.subset
+    intro z hz
+    exact ⟨⟨l.Rpos_subset_R hz.1, lemma_5_1_Rpos_pole_not_RC hG hG_circ_mero hG_star_mero hx₀ hGc_contour hGs_contour hx z hz.1 hz.2⟩, hz.2⟩
+  have hfin_neg : {z ∈ l.RposBar | meromorphicOrderAt F z < 0}.Finite := by
+    apply hfin.subset
+    intro z hz
+    exact ⟨⟨l.RposBar_subset_R hz.1, lemma_5_1_RposBar_pole_not_RC hG hG_circ_mero hG_star_mero hG_circ_symm hG_star_symm hx₀ hGc_contour hGs_contour hx z hz.1 hz.2⟩, hz.2⟩
+  have h_sum_pos := lemma_5_1_g (l := l) F l.Rpos h_mero_pos hfin_pos
+  have h_sum_neg := lemma_5_1_g (l := l) F l.RposBar h_mero_neg hfin_neg
+  have h_add := Filter.Tendsto.add h_sum_pos h_sum_neg
+  have h_sum_eq : sumResiduesIn F l.Rpos + sumResiduesIn F l.RposBar = sumResiduesIn F (l.R \ l.RC) := by
+    let P : Set ℂ := {z | meromorphicOrderAt F z < 0}
+    have h_residue_zero_pos : ∀ s ∈ l.Rpos, s ∉ P → residue F s = 0 := by
+      intro s hsS hs_not_pole
+      exact residue_eq_zero_of_not_pole_of_meromorphicAt (h_mero_pos s hsS)
+        (le_of_not_gt hs_not_pole)
+    have h_residue_zero_neg : ∀ s ∈ l.RposBar, s ∉ P → residue F s = 0 := by
+      intro s hsS hs_not_pole
+      exact residue_eq_zero_of_not_pole_of_meromorphicAt (h_mero_neg s hsS)
+        (le_of_not_gt hs_not_pole)
+    have h_mero_off : MeromorphicOn F (l.R \ l.RC) := by
+      intro z hz
+      rcases l.mem_Rpos_or_mem_RposBar_of_mem_R_diff_RC hz with hz_pos | hz_neg
+      · exact h_mero_pos z hz_pos
+      · exact h_mero_neg z hz_neg
+    have h_residue_zero_off : ∀ s ∈ l.R \ l.RC, s ∉ P → residue F s = 0 := by
+      intro s hsS hs_not_pole
+      exact residue_eq_zero_of_not_pole_of_meromorphicAt (h_mero_off s hsS)
+        (le_of_not_gt hs_not_pole)
+    have h_pos_reduce : sumResiduesIn F (l.Rpos ∩ P) = sumResiduesIn F l.Rpos := by
+      exact sumResiduesIn_inter_eq_of_set_eq (F := F) (Rn := l.Rpos) (S2 := l.Rpos) (P := P)
+        rfl h_residue_zero_pos
+    have h_neg_reduce : sumResiduesIn F (l.RposBar ∩ P) = sumResiduesIn F l.RposBar := by
+      exact sumResiduesIn_inter_eq_of_set_eq (F := F) (Rn := l.RposBar) (S2 := l.RposBar)
+        (P := P) rfl h_residue_zero_neg
+    have h_off_reduce : sumResiduesIn F ((l.R \ l.RC) ∩ P) = sumResiduesIn F (l.R \ l.RC) := by
+      exact sumResiduesIn_inter_eq_of_set_eq (F := F) (Rn := l.R \ l.RC) (S2 := l.R \ l.RC)
+        (P := P) rfl h_residue_zero_off
+    rw [← h_pos_reduce, ← h_neg_reduce, ← h_off_reduce]
+    have hfin_pos' : (l.Rpos ∩ P).Finite := by
+      simpa [P, Set.setOf_and] using hfin_pos
+    have hfin_neg' : (l.RposBar ∩ P).Finite := by
+      simpa [P, Set.setOf_and] using hfin_neg
+    have hfin_off' : ((l.R \ l.RC) ∩ P).Finite := by
+      simpa [P, Set.setOf_and] using hfin
+    have h_poles_partition :
+        (l.Rpos ∩ P) ∪ (l.RposBar ∩ P) = (l.R \ l.RC) ∩ P := by
+      ext z
+      constructor
+      · rintro (hz | hz)
+        · exact ⟨⟨l.Rpos_subset_R hz.1, lemma_5_1_Rpos_pole_not_RC hG hG_circ_mero hG_star_mero hx₀ hGc_contour hGs_contour hx z hz.1 hz.2⟩, hz.2⟩
+        · exact ⟨⟨l.RposBar_subset_R hz.1, lemma_5_1_RposBar_pole_not_RC hG hG_circ_mero hG_star_mero hG_circ_symm hG_star_symm hx₀ hGc_contour hGs_contour hx z hz.1 hz.2⟩, hz.2⟩
+      · intro hz
+        rcases l.mem_Rpos_or_mem_RposBar_of_mem_R_diff_RC hz.1 with hz_pos | hz_neg
+        · exact Or.inl ⟨hz_pos, hz.2⟩
+        · exact Or.inr ⟨hz_neg, hz.2⟩
+    have h_poles_disjoint : Disjoint (l.Rpos ∩ P) (l.RposBar ∩ P) := by
+      exact l.disjoint_Rpos_RposBar.mono Set.inter_subset_left Set.inter_subset_left
+    have h_pos_finset :
+        sumResiduesIn F (l.Rpos ∩ P) = ∑ z ∈ hfin_pos'.toFinset, residue F z := by
+      have e : l.Rpos ∩ P = ↑hfin_pos'.toFinset := hfin_pos'.coe_toFinset.symm
+      have e_sum : sumResiduesIn F (l.Rpos ∩ P) = sumResiduesIn F (↑hfin_pos'.toFinset) := congr_arg (sumResiduesIn F) e
+      rw [e_sum, sumResiduesIn, tsum_fintype, ← Finset.sum_coe_sort]
+      rfl
+    have h_neg_finset :
+        sumResiduesIn F (l.RposBar ∩ P) = ∑ z ∈ hfin_neg'.toFinset, residue F z := by
+      have e : l.RposBar ∩ P = ↑hfin_neg'.toFinset := hfin_neg'.coe_toFinset.symm
+      have e_sum : sumResiduesIn F (l.RposBar ∩ P) = sumResiduesIn F (↑hfin_neg'.toFinset) := congr_arg (sumResiduesIn F) e
+      rw [e_sum, sumResiduesIn, tsum_fintype, ← Finset.sum_coe_sort]
+      rfl
+    have h_off_finset :
+        sumResiduesIn F ((l.R \ l.RC) ∩ P) = ∑ z ∈ hfin_off'.toFinset, residue F z := by
+      have e : (l.R \ l.RC) ∩ P = ↑hfin_off'.toFinset := hfin_off'.coe_toFinset.symm
+      have e_sum : sumResiduesIn F ((l.R \ l.RC) ∩ P) = sumResiduesIn F (↑hfin_off'.toFinset) := congr_arg (sumResiduesIn F) e
+      rw [e_sum, sumResiduesIn, tsum_fintype, ← Finset.sum_coe_sort]
+      rfl
+    have h_union_finset :
+        hfin_off'.toFinset = hfin_pos'.toFinset ∪ hfin_neg'.toFinset := by
+      ext z
+      simp [Set.Finite.mem_toFinset, ← h_poles_partition]
+    have h_disj_finset : Disjoint hfin_pos'.toFinset hfin_neg'.toFinset := by
+      rw [← Finset.disjoint_coe]
+      simpa [hfin_pos'.coe_toFinset, hfin_neg'.coe_toFinset] using h_poles_disjoint
+    rw [h_pos_finset, h_neg_finset, h_off_finset, h_union_finset, Finset.sum_union h_disj_finset]
+  exact h_sum_eq ▸ h_add
+
 theorem lemma_5_1
     (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
     (hG_circ_mero : MeromorphicOn G_circ l.R) (hG_star_mero : MeromorphicOn G_star l.R)
-    (hG_star_symm : ConjAntisymm G_star)
+    (hG_circ_symm : ConjSymm G_circ) (hG_star_symm : ConjAntisymm G_star)
     (hx₀ : 1 ≤ x₀)
     (hG_bdd : IsBoundedNoPolesOn (fun s ↦ G s * (x₀ : ℂ) ^ s) l.Rboundary)
     (hGc_L : IsBoundedNoPolesOn (fun s ↦ G_circ s * (x₀ : ℂ) ^ s) l.L)
@@ -3179,7 +3422,183 @@ theorem lemma_5_1
       (↑(π⁻¹ * (l.intC (fun s ↦ G_star s * (x : ℂ) ^ s)).im) : ℂ) +
       sumResiduesIn (fun s ↦ G s * (x : ℂ) ^ s) (l.R \ l.RC) +
       l.sumResiduesLim (fun s ↦ G_circ s * (x : ℂ) ^ s) l.RC := by
-  sorry
+  let F : ℂ → ℂ := fun s ↦ G s * (x : ℂ) ^ s
+  let Fc : ℂ → ℂ := fun s ↦ G_circ s * (x : ℂ) ^ s
+  let Fs : ℂ → ℂ := fun s ↦ G_star s * (x : ℂ) ^ s
+
+  -- Step 1: split the vertical line at `Re s = 1` into its upper and lower halves.
+  have h_vertical_split :
+      (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt 1 F =
+        (2 * (π : ℂ) * Complex.I)⁻¹ * intVSeg 1 0 l.T F +
+          (2 * (π : ℂ) * Complex.I)⁻¹ * intVSeg 1 (-l.T) 0 F := by
+    unfold LadderParams.intVerticalAt intVSeg
+    rw [← mul_add]
+    congr 2
+    have h_upper_nopoles : ∀ s ∈ l.Rboundary, 0 ≤ s.im → 0 ≤ meromorphicOrderAt (G_circ + G_star) s := fun s hs_bd hs_im ↦
+      upper_Rboundary_no_poles l hG hG_circ_mero hG_star_mero hx₀ hG_bdd hGc_contour hGs_contour s hs_bd hs_im
+    have h_lower_nopoles : ∀ s ∈ l.Rboundary, s.im ≤ 0 → 0 ≤ meromorphicOrderAt (G_circ - G_star) s := fun s hs_bd hs_im ↦
+      lower_Rboundary_no_poles l hG hG_circ_mero hG_star_mero hx₀ hG_bdd hGc_contour hGs_contour s hs_bd hs_im
+    have h_int_upper := G_mul_cpow_integrable_vseg l hG hG_circ_mero hG_star_mero hx₀ h_upper_nopoles hx 0 l.T le_rfl (by linarith [l.hT]) le_rfl
+    have h_int_lower := G_mul_cpow_integrable_vseg_lower l hG hG_circ_mero hG_star_mero hx₀ h_lower_nopoles hx (-l.T) 0 (by linarith [l.hT]) (by linarith [l.hT]) le_rfl
+    rw [add_comm]
+    exact (intervalIntegral.integral_add_adjacent_intervals h_int_lower h_int_upper).symm
+
+  -- Step 2: for each truncation level, shift the upper and lower halves to `C_n^+` and `C_n^-`.
+  have h_upper_shift :
+      ∀ n : ℕ,
+        (2 * (π : ℂ) * Complex.I)⁻¹ * intVSeg 1 0 l.T F =
+          (2 * (π : ℂ) * Complex.I)⁻¹ * l.intCnPlus n F +
+            sumResiduesIn F (l.Rpos ∩ {z | l.σ n < z.re}) := by
+    intro n
+    simpa [F] using
+      (lemma_5_1_a (l := l) (G := G) (G_circ := G_circ) (G_star := G_star)
+        (x₀ := x₀) (x := x) n hG hG_circ_mero hG_star_mero hx₀ hG_bdd hGc_L hGc_contour
+        hGs_L hGs_contour hx hfin hsimple)
+  have h_lower_shift :
+      ∀ n : ℕ,
+        (2 * (π : ℂ) * Complex.I)⁻¹ * intVSeg 1 (-l.T) 0 F =
+          (2 * (π : ℂ) * Complex.I)⁻¹ * l.intCnMinus n F +
+            sumResiduesIn F (l.RposBar ∩ {z | l.σ n < z.re}) := by
+    intro n
+    simpa [F] using
+      (lemma_5_1_b (l := l) (G := G) (G_circ := G_circ) (G_star := G_star)
+        (x₀ := x₀) (x := x) n hG hG_circ_mero hG_star_mero hG_circ_symm hG_star_symm
+        hx₀ hG_bdd hGc_L hGc_contour hGs_L hGs_contour hx hfin hsimple)
+
+  -- Step 3: decompose the truncated contours into their `G_circ` and `G_star` parts.
+  have hGc_shift :
+      ∀ n : ℕ, 1 ≤ n →
+        (2 * (π : ℂ) * Complex.I)⁻¹ * (l.intCn1Plus n Fc + l.intCn1Minus n Fc) =
+          (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt (l.σ n) Fc +
+            sumResiduesIn Fc (l.RC ∩ {z | l.σ n < z.re}) := by
+    intro n hn
+    simpa [Fc] using
+      (lemma_5_1_c (l := l) (G_circ := G_circ) (x₀ := x₀) (x := x) n hn hG_circ_mero
+        hG_circ_symm hx₀ hGc_L hGc_contour hx hsimple_circ)
+  have hGs_reflect :
+      ∀ n : ℕ,
+        l.intCn1Plus n Fs - l.intCn1Minus n Fs =
+          2 * Complex.I * ((l.intCn1Plus n Fs).im : ℂ) := by
+    intro n
+    simpa [Fs] using
+      (lemma_5_1_d (l := l) (G_star := G_star) (x₀ := x₀) (x := x) n hG_star_symm hx₀ hx)
+
+  -- Step 4: record the limiting pieces that survive as `n → ∞`.
+  have h_Cinf_tendsto :
+      Filter.Tendsto
+        (fun n ↦ intHSeg l.T (l.σ n) 1 F + intHSeg (-l.T) 1 (l.σ n) F)
+        Filter.atTop (nhds (l.intCinf F)) := by
+    simpa [F] using
+      (lemma_5_1_e (l := l) (G := G) (G_circ := G_circ) (G_star := G_star)
+        (x₀ := x₀) (x := x) hG hG_circ_mero hG_star_mero hx₀ hG_bdd hGc_contour
+        hGs_contour hx)
+  have h_column_tendsto :
+      Filter.Tendsto (fun n ↦ l.intVerticalAt (l.σ n) Fc) Filter.atTop (nhds (0 : ℂ)) := by
+    simpa [Fc] using
+      (lemma_5_1_f (l := l) (G_circ := G_circ) (x₀ := x₀) (x := x) hx₀ hx hGc_L)
+  have h_contour_tendsto :
+      Filter.Tendsto (fun n ↦ l.intCn1Plus n Fs) Filter.atTop (nhds (l.intC Fs)) := by
+    simpa [Fs] using
+      (lemma_5_1_h (l := l) (G_star := G_star) (x₀ := x₀) (x := x) hx₀ hx hG_star_mero
+        hGs_L hGs_contour)
+
+  -- Step 5: the off-axis residues converge to the full sum on `R \ RC`.
+  have h_offAxis_tendsto :
+      Filter.Tendsto
+        (fun n ↦
+          sumResiduesIn F (l.Rpos ∩ {z | l.σ n < z.re}) +
+            sumResiduesIn F (l.RposBar ∩ {z | l.σ n < z.re}))
+        Filter.atTop (nhds (sumResiduesIn F (l.R \ l.RC))) := by
+    exact lemma_5_1_offAxis_tendsto hG hG_circ_mero hG_star_mero hG_circ_symm hG_star_symm hx₀ hGc_contour hGs_contour hx hfin
+
+  -- Step 6: the central-strip residue truncations converge to the improper residue sum.
+  have h_centralResidues_tendsto :
+      Filter.Tendsto
+        (fun n ↦ sumResiduesIn Fc (l.RC ∩ {z | l.σ n < z.re}))
+        Filter.atTop (nhds (l.sumResiduesLim Fc l.RC)) := by
+    have h_converges : ∃ L, Filter.Tendsto (fun n ↦ sumResiduesIn Fc (l.RC ∩ {z | l.σ n < z.re})) Filter.atTop (nhds L) := by
+      -- Show the truncated central-strip residue sums actually converge. Once this existential
+      -- limit is available, `sumResiduesLim` is exactly `limUnder` of this sequence.
+      sorry
+    unfold LadderParams.sumResiduesLim
+    simpa using tendsto_nhds_limUnder h_converges
+
+  -- Step 7: for large `n`, combine the finite truncation identities into the truncated formula.
+  have h_truncated_formula :
+      ∀ᶠ n in Filter.atTop,
+        (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt 1 F =
+          ((2 * (π : ℂ) * Complex.I)⁻¹ *
+              (intHSeg l.T (l.σ n) 1 F + intHSeg (-l.T) 1 (l.σ n) F)) +
+            (↑(π⁻¹ * (l.intCn1Plus n Fs).im) : ℂ) +
+            (sumResiduesIn F (l.Rpos ∩ {z | l.σ n < z.re}) +
+             sumResiduesIn F (l.RposBar ∩ {z | l.σ n < z.re})) +
+            (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt (l.σ n) Fc +
+            sumResiduesIn Fc (l.RC ∩ {z | l.σ n < z.re}) := by
+    filter_upwards [Filter.eventually_ge_atTop 1] with n hn
+    have h_upper := h_upper_shift n
+    have h_lower := h_lower_shift n
+    have hGc := hGc_shift n hn
+    have hGs := hGs_reflect n
+    have h_plus : l.intCnPlus n F = intHSeg l.T (l.σ n) 1 F + l.intCn1Plus n F := by
+      unfold LadderParams.intCnPlus LadderParams.intCn1Plus; abel
+    have h_minus : l.intCnMinus n F = intHSeg (-l.T) 1 (l.σ n) F + l.intCn1Minus n F := by
+      unfold LadderParams.intCnMinus LadderParams.intCn1Minus; abel
+    rw [h_vertical_split, h_upper, h_lower, h_plus, h_minus]
+    have h_F_plus : l.intCn1Plus n F = l.intCn1Plus n Fc + l.intCn1Plus n Fs := by
+      -- Unfold `intCn1Plus` and use `hG` pointwise on the two pieces of `C_{n,1}^+`.
+      -- Along both pieces, the imaginary part is positive (`δ ≤ im`), so `Real.sign s.im = 1`
+      -- and hence `F = Fc + Fs` there.
+      sorry
+    have h_F_minus : l.intCn1Minus n F = l.intCn1Minus n Fc - l.intCn1Minus n Fs := by
+      -- Unfold `intCn1Minus` and use `hG` pointwise on the two pieces of `C_{n,1}^-`.
+      -- Along both pieces, the imaginary part is negative (`im ≤ -δ`), so
+      -- `Real.sign s.im = -1` and hence `F = Fc - Fs` there.
+      sorry
+    rw [h_F_plus, h_F_minus]
+    have hGs_div : (2 * (π : ℂ) * Complex.I)⁻¹ * (l.intCn1Plus n Fs - l.intCn1Minus n Fs) = ↑(π⁻¹ * (l.intCn1Plus n Fs).im) := by
+      -- Rewrite with `hGs`, then simplify the scalar factor
+      -- `(2 * π * I)⁻¹ * (2 * I) = π⁻¹`.
+      sorry
+    linear_combination hGc + hGs_div
+
+  -- Step 8: pass to the limit in the truncated formula.
+  have h_final :
+      (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt 1 F =
+        (2 * (π : ℂ) * Complex.I)⁻¹ * l.intCinf F +
+          (↑(π⁻¹ * (l.intC Fs).im) : ℂ) +
+          sumResiduesIn F (l.R \ l.RC) +
+          l.sumResiduesLim Fc l.RC := by
+    have h_im_tendsto : Filter.Tendsto (fun n ↦ (↑(π⁻¹ * (l.intCn1Plus n Fs).im) : ℂ)) Filter.atTop (nhds (↑(π⁻¹ * (l.intC Fs).im) : ℂ)) := by
+      have h_im_real :
+          Filter.Tendsto (fun n ↦ (l.intCn1Plus n Fs).im) Filter.atTop
+            (nhds (l.intC Fs).im) := by
+        exact (continuous_im.tendsto _).comp h_contour_tendsto
+      have h_scaled_real :
+          Filter.Tendsto (fun n ↦ π⁻¹ * (l.intCn1Plus n Fs).im) Filter.atTop
+            (nhds (π⁻¹ * (l.intC Fs).im)) := by
+        exact h_im_real.const_mul π⁻¹
+      exact (continuous_ofReal.tendsto _).comp h_scaled_real
+    have h_col_tendsto : Filter.Tendsto (fun n ↦ (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt (l.σ n) Fc) Filter.atTop (nhds 0) :=
+      by simpa using h_column_tendsto.const_mul ((2 * (π : ℂ) * Complex.I)⁻¹)
+    have h_RHS_tendsto : Filter.Tendsto (fun n ↦
+          ((2 * (π : ℂ) * Complex.I)⁻¹ *
+              (intHSeg l.T (l.σ n) 1 F + intHSeg (-l.T) 1 (l.σ n) F)) +
+            (↑(π⁻¹ * (l.intCn1Plus n Fs).im) : ℂ) +
+            (sumResiduesIn F (l.Rpos ∩ {z | l.σ n < z.re}) +
+            sumResiduesIn F (l.RposBar ∩ {z | l.σ n < z.re})) +
+            (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt (l.σ n) Fc +
+            sumResiduesIn Fc (l.RC ∩ {z | l.σ n < z.re})) Filter.atTop (nhds (
+        (2 * (π : ℂ) * Complex.I)⁻¹ * l.intCinf F +
+          (↑(π⁻¹ * (l.intC Fs).im) : ℂ) +
+          sumResiduesIn F (l.R \ l.RC) +
+          0 +
+          l.sumResiduesLim Fc l.RC)) :=
+      ((((h_Cinf_tendsto.const_mul _).add h_im_tendsto).add h_offAxis_tendsto).add h_col_tendsto).add h_centralResidues_tendsto
+    have h_LHS_tendsto : Filter.Tendsto (fun n : ℕ ↦ (2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt 1 F) Filter.atTop (nhds ((2 * (π : ℂ) * Complex.I)⁻¹ * l.intVerticalAt 1 F)) := tendsto_const_nhds
+    have h_eq := tendsto_nhds_unique (Filter.Tendsto.congr' h_truncated_formula h_LHS_tendsto) h_RHS_tendsto
+    linear_combination h_eq
+
+  simpa [F, Fc, Fs] using h_final
 
 end ContourShifting
 
