@@ -3186,17 +3186,19 @@ private lemma lemma_5_1_mero_pos {l : LadderParams} {G G_circ G_star : ℂ → �
     (hG_star_mero : MeromorphicOn G_star l.R)
     (hx : 0 < x) :
     MeromorphicOn (fun s ↦ G s * (x : ℂ) ^ s) l.Rpos := by
-  apply MeromorphicOn.congr (f := fun s ↦ (G_circ s + G_star s) * (x : ℂ) ^ s)
-  · have h1 : MeromorphicOn (fun s ↦ (x : ℂ) ^ s) l.Rpos := fun z _ ↦ meromorphicAt_rpow hx z
-    have h2 : MeromorphicOn (G_circ + G_star) l.Rpos := (hG_circ_mero.add hG_star_mero).mono l.Rpos_subset_R
-    exact h2.mul h1 |>.congr (fun _ _ => by ring)
-  · intro z hz
-    have hz_pos : 0 < z.im := by linarith [hz.2.1, l.hδ.1]
-    have h_sign : (Real.sign z.im : ℂ) = 1 := by simp [Real.sign_of_pos hz_pos]
-    calc (G_circ z + G_star z) * (x : ℂ) ^ z
-      _ = (G_circ z + 1 * G_star z) * (x : ℂ) ^ z := by ring
-      _ = (G_circ z + ↑(Real.sign z.im) * G_star z) * (x : ℂ) ^ z := by rw [h_sign]
-      _ = G z * (x : ℂ) ^ z := by rw [← hG z]
+  intro z hz
+  have hz_pos : 0 < z.im := lt_of_lt_of_le l.hδ.1 hz.2.1
+  have hpos_nhds : {t : ℂ | 0 < t.im} ∈ nhds z :=
+    (isOpen_lt continuous_const Complex.continuous_im).mem_nhds hz_pos
+  have hGc_mero : MeromorphicAt G_circ z := hG_circ_mero z (l.Rpos_subset_R hz)
+  have hGs_mero : MeromorphicAt G_star z := hG_star_mero z (l.Rpos_subset_R hz)
+  have hF_mero : MeromorphicAt (fun s ↦ (G_circ s + G_star s) * (x : ℂ) ^ s) z :=
+    (hGc_mero.add hGs_mero).mul (meromorphicAt_rpow hx z)
+  apply hF_mero.congr
+  apply eventually_nhdsWithin_of_eventually_nhds
+  filter_upwards [hpos_nhds] with t ht
+  have hsign : (Real.sign t.im : ℂ) = 1 := by simp [Real.sign_of_pos ht]
+  rw [hG t, hsign, one_mul]
 
 private lemma lemma_5_1_mero_neg {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x : ℝ}
     (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
@@ -3204,17 +3206,19 @@ private lemma lemma_5_1_mero_neg {l : LadderParams} {G G_circ G_star : ℂ → �
     (hG_star_mero : MeromorphicOn G_star l.R)
     (hx : 0 < x) :
     MeromorphicOn (fun s ↦ G s * (x : ℂ) ^ s) l.RposBar := by
-  apply MeromorphicOn.congr (f := fun s ↦ (G_circ s - G_star s) * (x : ℂ) ^ s)
-  · have h1 : MeromorphicOn (fun s ↦ (x : ℂ) ^ s) l.RposBar := fun z _ ↦ meromorphicAt_rpow hx z
-    have h2 : MeromorphicOn (G_circ - G_star) l.RposBar := (hG_circ_mero.sub hG_star_mero).mono l.RposBar_subset_R
-    exact h2.mul h1 |>.congr (fun _ _ => by ring)
-  · intro z hz
-    have hz_neg : z.im < 0 := by linarith [hz.2.2, l.hδ.1]
-    have h_sign : (Real.sign z.im : ℂ) = -1 := by simp [Real.sign_of_neg hz_neg]
-    calc (G_circ z - G_star z) * (x : ℂ) ^ z
-      _ = (G_circ z + (-1) * G_star z) * (x : ℂ) ^ z := by ring
-      _ = (G_circ z + ↑(Real.sign z.im) * G_star z) * (x : ℂ) ^ z := by rw [h_sign]
-      _ = G z * (x : ℂ) ^ z := by rw [← hG z]
+  intro z hz
+  have hz_neg : z.im < 0 := lt_of_le_of_lt hz.2.2 (neg_lt_zero.mpr l.hδ.1)
+  have hneg_nhds : {t : ℂ | t.im < 0} ∈ nhds z :=
+    (isOpen_lt Complex.continuous_im continuous_const).mem_nhds hz_neg
+  have hGc_mero : MeromorphicAt G_circ z := hG_circ_mero z (l.RposBar_subset_R hz)
+  have hGs_mero : MeromorphicAt G_star z := hG_star_mero z (l.RposBar_subset_R hz)
+  have hF_mero : MeromorphicAt (fun s ↦ (G_circ s - G_star s) * (x : ℂ) ^ s) z :=
+    (hGc_mero.sub hGs_mero).mul (meromorphicAt_rpow hx z)
+  apply hF_mero.congr
+  apply eventually_nhdsWithin_of_eventually_nhds
+  filter_upwards [hneg_nhds] with t ht
+  have hsign : (Real.sign t.im : ℂ) = -1 := by simp [Real.sign_of_neg ht]
+  rw [hG t, hsign]; ring
 
 private lemma lemma_5_1_Rpos_pole_not_RC {l : LadderParams} {G G_circ G_star : ℂ → ℂ} {x₀ x : ℝ}
     (hG : ∀ s, G s = G_circ s + (Real.sign s.im : ℂ) * G_star s)
@@ -3230,7 +3234,8 @@ private lemma lemma_5_1_Rpos_pole_not_RC {l : LadderParams} {G G_circ G_star : �
   have h_im_eq : z.im = l.δ := le_antisymm (abs_le.mp hRC.2).2 hz.2.1
   have hz_ac : z ∈ l.admissible_contour := Or.inl ⟨hz.1, h_im_eq⟩
   have hpos_mem : {t : ℂ | 0 < t.im} ∈ nhds z :=
-    (isOpen_lt continuous_const Complex.continuous_im).mem_nhds (by linarith [l.hδ.1, h_im_eq])
+    (isOpen_lt continuous_const Complex.continuous_im).mem_nhds
+      (Set.mem_setOf_eq.mpr (h_im_eq ▸ l.hδ.1))
   have hG_eq : G =ᶠ[nhds z] G_circ + G_star := by
     filter_upwards [hpos_mem] with t ht
     have hsign : (Real.sign t.im : ℂ) = 1 := by simp [Real.sign_of_pos ht]
@@ -3274,7 +3279,8 @@ private lemma lemma_5_1_RposBar_pole_not_RC {l : LadderParams} {G G_circ G_star 
     rw [meromorphicOrderAt_starRingEnd (Or.inr hG_star_symm)]
     exact meromorphicOrderAt_nonneg_of_isBoundedNoPolesOn (hG_star_mero _ hz_R_star) hw_pow_mero hw_pow_order hGs_contour hz_ac
   have hneg_mem : {t : ℂ | t.im < 0} ∈ nhds z :=
-    (isOpen_lt Complex.continuous_im continuous_const).mem_nhds (by linarith [l.hδ.1, h_im_eq])
+    (isOpen_lt Complex.continuous_im continuous_const).mem_nhds
+      (Set.mem_setOf_eq.mpr (h_im_eq ▸ neg_lt_zero.mpr l.hδ.1))
   have hG_eq : G =ᶠ[nhds z] G_circ - G_star := by
     filter_upwards [hneg_mem] with t ht
     have hsign : (Real.sign t.im : ℂ) = -1 := by simp [Real.sign_of_neg ht]
@@ -3372,20 +3378,17 @@ private lemma lemma_5_1_offAxis_tendsto {l : LadderParams} {G G_circ G_star : �
         sumResiduesIn F (l.Rpos ∩ P) = ∑ z ∈ hfin_pos'.toFinset, residue F z := by
       have e : l.Rpos ∩ P = ↑hfin_pos'.toFinset := hfin_pos'.coe_toFinset.symm
       have e_sum : sumResiduesIn F (l.Rpos ∩ P) = sumResiduesIn F (↑hfin_pos'.toFinset) := congr_arg (sumResiduesIn F) e
-      rw [e_sum, sumResiduesIn, tsum_fintype, ← Finset.sum_coe_sort]
-      rfl
+      rw [e_sum, sumResiduesIn, Finset.tsum_subtype']
     have h_neg_finset :
         sumResiduesIn F (l.RposBar ∩ P) = ∑ z ∈ hfin_neg'.toFinset, residue F z := by
       have e : l.RposBar ∩ P = ↑hfin_neg'.toFinset := hfin_neg'.coe_toFinset.symm
       have e_sum : sumResiduesIn F (l.RposBar ∩ P) = sumResiduesIn F (↑hfin_neg'.toFinset) := congr_arg (sumResiduesIn F) e
-      rw [e_sum, sumResiduesIn, tsum_fintype, ← Finset.sum_coe_sort]
-      rfl
+      rw [e_sum, sumResiduesIn, Finset.tsum_subtype']
     have h_off_finset :
         sumResiduesIn F ((l.R \ l.RC) ∩ P) = ∑ z ∈ hfin_off'.toFinset, residue F z := by
       have e : (l.R \ l.RC) ∩ P = ↑hfin_off'.toFinset := hfin_off'.coe_toFinset.symm
       have e_sum : sumResiduesIn F ((l.R \ l.RC) ∩ P) = sumResiduesIn F (↑hfin_off'.toFinset) := congr_arg (sumResiduesIn F) e
-      rw [e_sum, sumResiduesIn, tsum_fintype, ← Finset.sum_coe_sort]
-      rfl
+      rw [e_sum, sumResiduesIn, Finset.tsum_subtype']
     have h_union_finset :
         hfin_off'.toFinset = hfin_pos'.toFinset ∪ hfin_neg'.toFinset := by
       ext z
